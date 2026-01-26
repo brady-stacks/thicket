@@ -10,6 +10,48 @@ use stacks_common::types::StacksEpochId;
 use std::sync::Arc;
 use crate::cache::Cache;
 
+pub async fn process_contract_source(source_code: &str, cache: Arc<Cache>) -> Result<serde_json::Value, Box<dyn std::error::Error>> {
+    // Step 1: Check cache first (using source code as key)
+    let cache_key = source_code;
+    let cache_result = tokio::task::spawn_blocking({
+        let cache = cache.clone();
+        let source = cache_key.to_string();
+        move || cache.get(&source)
+    }).await.map_err(|e| format!("Cache lookup error: {}", e))?;
+
+    if let Ok(Some((cached_source_code, cached_cost_map))) = cache_result {
+        println!("Cache hit for source code");
+        return Ok(json!({
+            "source_code": cached_source_code,
+            "cost_map": cached_cost_map
+        }));
+    }
+
+    println!("Cache miss for source code");
+    
+    // Step 2: Process the source code directly (skip HTML parsing)
+    let cost_map = analyze_contract_source(source_code)?;
+    
+    // Step 3: Store in cache
+    let cache_key_clone = cache_key.to_string();
+    let source_code_clone = source_code.to_string();
+    let cost_map_clone = cost_map.clone();
+    tokio::task::spawn_blocking({
+        let cache = cache.clone();
+        move || {
+            if let Err(e) = cache.set(&cache_key_clone, &source_code_clone, &cost_map_clone) {
+                eprintln!("Warning: Failed to cache result: {}", e);
+            }
+        }
+    }).await.ok();
+    
+    // Step 4: Return both source code and cost map as JSON
+    Ok(json!({
+        "source_code": source_code,
+        "cost_map": cost_map
+    }))
+}
+
 pub async fn process_contract_url(url: &str, cache: Arc<Cache>) -> Result<serde_json::Value, Box<dyn std::error::Error>> {
     // Step 1: Check cache first
     let cache_key = url;

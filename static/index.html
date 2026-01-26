@@ -40,21 +40,94 @@
             font-weight: normal;
             font-style: italic;
         }
-        #urlInput {
-            width: 100%;
+        .input-container {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+            position: relative;
+        }
+        .recent-searches-dropdown {
+            position: absolute;
+            top: 100%;
+            left: 100px;
+            right: 0;
+            margin-top: 5px;
+            background: #073642; /* Solarized base02 */
+            border: 1px solid #586e75; /* Solarized base01 */
+            border-radius: 4px;
+            max-height: 300px;
+            overflow-y: auto;
+            z-index: 1000;
+            display: none;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+        }
+        .recent-searches-dropdown.show {
+            display: block;
+        }
+        .recent-search-item {
+            padding: 10px 15px;
+            border-bottom: 1px solid #586e75; /* Solarized base01 */
+            cursor: pointer;
+            color: #839496; /* Solarized base0 */
+            font-size: 13px;
+        }
+        .recent-search-item:last-child {
+            border-bottom: none;
+        }
+        .recent-search-item:hover {
+            background: #002b36; /* Solarized base03 */
+        }
+        .recent-search-item-url {
+            color: #268bd2; /* Solarized blue */
+            word-break: break-all;
+        }
+        .recent-search-item-source {
+            color: #93a1a1; /* Solarized base1 */
+            white-space: pre;
+            font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', 'Consolas', 'source-code-pro', monospace;
+            font-size: 12px;
+            max-height: 60px;
+            overflow: hidden;
+        }
+        #inputTypeSelect {
+            padding: 12px;
+            font-size: 14px;
+            border: 2px solid #586e75; /* Solarized base01 */
+            border-radius: 4px;
+            background-color: #002b36; /* Solarized base03 */
+            color: #839496; /* Solarized base0 */
+            font-family: inherit;
+            cursor: pointer;
+            min-width: 100px;
+        }
+        #inputTypeSelect:focus {
+            outline: none;
+            border-color: #268bd2; /* Solarized blue */
+        }
+        #urlInput, #sourceInput {
+            flex: 1;
             padding: 12px;
             font-size: 14px;
             border: 2px solid #586e75; /* Solarized base01 */
             border-radius: 4px;
             box-sizing: border-box;
-            margin-bottom: 20px;
             background-color: #002b36; /* Solarized base03 */
             color: #839496; /* Solarized base0 */
             font-family: inherit;
         }
-        #urlInput:focus {
+        #sourceInput {
+            min-height: 200px;
+            resize: vertical;
+            white-space: pre;
+            overflow-wrap: normal;
+            overflow-x: auto;
+        }
+        #urlInput:focus, #sourceInput:focus {
             outline: none;
             border-color: #268bd2; /* Solarized blue */
+        }
+        #sourceInput {
+            display: none;
         }
         .content-wrapper {
             display: grid;
@@ -303,22 +376,172 @@
     <div class="container">
         <h1>Thicket</h1>
         <h3>Clarity Static Cost Analysis</h3>
-        <p style="color: #93a1a1;">Paste a mainnet contract URL to analyze its static cost:</p>
-        <input
-            type="text"
-            id="urlInput"
-            placeholder="https://explorer.hiro.so/txid/SP3YBY0BH4ANC0Q35QB6PD163F943FVFVDFM1SH7S.gl-api?chain=mainnet&tab=sourceCode"
-        />
+        <p id="inputDescription" style="color: #93a1a1;">Paste a contract URL analyze the static cost</p>
+        <div class="input-container">
+            <select id="inputTypeSelect">
+                <option value="url">URL</option>
+                <option value="source">Source</option>
+            </select>
+            <input
+                type="text"
+                id="urlInput"
+                placeholder="https://explorer.hiro.so/txid/SP3YBY0BH4ANC0Q35QB6PD163F943FVFVDFM1SH7S.gl-api?chain=mainnet&tab=sourceCode"
+            />
+            <textarea
+                id="sourceInput"
+                placeholder="Paste Clarity source code here..."
+            ></textarea>
+            <div id="recentSearchesDropdown" class="recent-searches-dropdown"></div>
+        </div>
         <div id="result"></div>
     </div>
 
     <script>
         const urlInput = document.getElementById('urlInput');
+        const sourceInput = document.getElementById('sourceInput');
+        const inputTypeSelect = document.getElementById('inputTypeSelect');
         const resultDiv = document.getElementById('result');
+        const recentSearchesDropdown = document.getElementById('recentSearchesDropdown');
         let lastPostedUrl = '';
+        let lastPostedSource = '';
         let costTreeData = {};
         let currentCostMap = {};
         let selectedFocusAttribute = 'runtime';
+
+        // Handle input type change
+        const inputDescription = document.getElementById('inputDescription');
+        inputTypeSelect.addEventListener('change', (e) => {
+            const inputType = e.target.value;
+            if (inputType === 'source') {
+                urlInput.style.display = 'none';
+                sourceInput.style.display = 'block';
+                inputDescription.textContent = 'Paste your contract source to analyze the static cost';
+            } else {
+                urlInput.style.display = 'block';
+                sourceInput.style.display = 'none';
+                inputDescription.textContent = 'Paste a mainnet contract URL or source code to analyze the static cost:';
+            }
+            hideRecentSearches();
+        });
+
+        // Show/hide recent searches dropdown
+        function showRecentSearches() {
+            recentSearchesDropdown.classList.add('show');
+        }
+
+        function hideRecentSearches() {
+            recentSearchesDropdown.classList.remove('show');
+        }
+
+        // Fetch and display recent URLs
+        async function loadRecentUrls() {
+            try {
+                const response = await fetch('/recent-urls');
+                if (!response.ok) return;
+                const data = await response.json();
+                const urls = data.urls || [];
+                
+                if (urls.length === 0) {
+                    recentSearchesDropdown.innerHTML = '<div class="recent-search-item" style="cursor: default; color: #586e75;">No recent URLs</div>';
+                    showRecentSearches();
+                    return;
+                }
+
+                recentSearchesDropdown.innerHTML = urls.map(url => 
+                    `<div class="recent-search-item" data-url="${escapeHtml(url)}">
+                        <div class="recent-search-item-url">${escapeHtml(url)}</div>
+                    </div>`
+                ).join('');
+
+                // Add click handlers
+                recentSearchesDropdown.querySelectorAll('.recent-search-item').forEach(item => {
+                    const url = item.getAttribute('data-url');
+                    if (url) {
+                        item.addEventListener('click', () => {
+                            urlInput.value = url;
+                            hideRecentSearches();
+                            processUrlInput();
+                        });
+                    }
+                });
+
+                showRecentSearches();
+            } catch (error) {
+                console.error('Error loading recent URLs:', error);
+            }
+        }
+
+        // Fetch and display recent sources
+        async function loadRecentSources() {
+            try {
+                const response = await fetch('/recent-sources');
+                if (!response.ok) return;
+                const data = await response.json();
+                const sources = data.sources || [];
+                
+                if (sources.length === 0) {
+                    recentSearchesDropdown.innerHTML = '<div class="recent-search-item" style="cursor: default; color: #586e75;">No recent sources</div>';
+                    showRecentSearches();
+                    return;
+                }
+
+                recentSearchesDropdown.innerHTML = sources.map(source => 
+                    `<div class="recent-search-item" data-key="${escapeHtml(source.key)}">
+                        <div class="recent-search-item-source">${escapeHtml(source.preview)}</div>
+                    </div>`
+                ).join('');
+
+                // Add click handlers
+                recentSearchesDropdown.querySelectorAll('.recent-search-item').forEach(item => {
+                    const key = item.getAttribute('data-key');
+                    if (key) {
+                        item.addEventListener('click', async () => {
+                            try {
+                                const response = await fetch('/source-by-key', {
+                                    method: 'POST',
+                                    headers: {
+                                        'Content-Type': 'application/json',
+                                    },
+                                    body: JSON.stringify({ key: key })
+                                });
+                                if (response.ok) {
+                                    const data = await response.json();
+                                    sourceInput.value = data.source_code;
+                                    hideRecentSearches();
+                                    processSourceInput();
+                                }
+                            } catch (error) {
+                                console.error('Error loading source:', error);
+                            }
+                        });
+                    }
+                });
+
+                showRecentSearches();
+            } catch (error) {
+                console.error('Error loading recent sources:', error);
+            }
+        }
+
+        // Show recent searches when clicking on input
+        urlInput.addEventListener('focus', () => {
+            if (inputTypeSelect.value === 'url') {
+                loadRecentUrls();
+            }
+        });
+
+        sourceInput.addEventListener('focus', () => {
+            if (inputTypeSelect.value === 'source') {
+                loadRecentSources();
+            }
+        });
+
+        // Hide dropdown when clicking outside
+        document.addEventListener('click', (e) => {
+            if (!e.target.closest('.input-container')) {
+                hideRecentSearches();
+            }
+        });
 
         function renderSourceCode(sourceCode, costMap) {
             costTreeData = costMap;
@@ -537,184 +760,235 @@
             return tooltip;
         }
 
-        // Handle paste event - posts immediately when URL is pasted
+        // Handle paste/input events for URL
         urlInput.addEventListener('paste', async (e) => {
-            // Wait for paste to complete
             setTimeout(async () => {
-                const url = urlInput.value.trim();
-
-                // Only post if URL is different from last one and not empty
-                if (url && url !== lastPostedUrl && url.startsWith('http')) {
-                    lastPostedUrl = url;
-                    resultDiv.innerHTML = '<div class="loading">Loading...</div>';
-
-                    try {
-                        const response = await fetch('/contract', {
-                            method: 'POST',
-                            headers: {
-                                'Content-Type': 'application/json',
-                            },
-                            body: JSON.stringify({ url: url })
-                        });
-
-                        if (!response.ok) {
-                            const errorData = await response.json().catch(() => ({}));
-                            throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
-                        }
-
-                        const data = await response.json();
-
-                        // Render the result
-                        const sourceCode = data.source_code || '';
-                        const costMap = data.cost_map || {};
-                        currentCostMap = costMap; // Store for dropdown updates
-
-                        resultDiv.innerHTML = `
-                            ${renderTopFunctionsTable(costMap, selectedFocusAttribute)}
-                            <div class="content-wrapper cost-map-hidden">
-                                <div class="source-section">
-                                    <h2 class="section-title">Source Code</h2>
-                                    <div id="sourceCode">${renderSourceCode(sourceCode, costMap)}</div>
-                                </div>
-                                <div class="cost-section hidden">
-                                    <h2 class="section-title">Cost Map</h2>
-                                    <div id="costTree">${JSON.stringify(costMap, null, 2)}</div>
-                                </div>
-                                <div class="cost-map-toggle"></div>
-                            </div>
-                        `;
-
-                        // Setup top functions table event listeners
-                        function setupTopFunctionsListeners() {
-                            const topFunctionsHeader = resultDiv.querySelector('.top-functions-header');
-                            if (topFunctionsHeader) {
-                                // Remove existing listeners by cloning
-                                const newHeader = topFunctionsHeader.cloneNode(true);
-                                topFunctionsHeader.parentNode.replaceChild(newHeader, topFunctionsHeader);
-
-                                newHeader.addEventListener('click', (e) => {
-                                    // Don't toggle if clicking the dropdown
-                                    if (e.target.classList.contains('top-functions-focus-select')) {
-                                        return;
-                                    }
-                                    const isCollapsed = newHeader.classList.contains('collapsed');
-                                    const table = resultDiv.querySelector('.top-functions-table');
-                                    if (isCollapsed) {
-                                        newHeader.classList.remove('collapsed');
-                                        table.classList.remove('collapsed');
-                                    } else {
-                                        newHeader.classList.add('collapsed');
-                                        table.classList.add('collapsed');
-                                    }
-                                });
-                            }
-
-                            const focusSelect = resultDiv.querySelector('#focusAttributeSelect');
-                            if (focusSelect) {
-                                focusSelect.addEventListener('change', (e) => {
-                                    selectedFocusAttribute = e.target.value;
-                                    updateTopFunctionsTable();
-                                });
-                            }
-                        }
-
-                        function updateTopFunctionsTable() {
-                            const topFunctionsContainer = resultDiv.querySelector('.top-functions');
-                            if (topFunctionsContainer) {
-                                const wasCollapsed = resultDiv.querySelector('.top-functions-header').classList.contains('collapsed');
-                                topFunctionsContainer.outerHTML = renderTopFunctionsTable(currentCostMap, selectedFocusAttribute);
-
-                                const newHeader = resultDiv.querySelector('.top-functions-header');
-                                const newTable = resultDiv.querySelector('.top-functions-table');
-                                if (wasCollapsed && newHeader && newTable) {
-                                    newHeader.classList.add('collapsed');
-                                    newTable.classList.add('collapsed');
-                                }
-
-                                setupTopFunctionsListeners();
-                            }
-                        }
-
-                        setupTopFunctionsListeners();
-
-                        // Add cost map toggle handler
-                        const costMapToggle = resultDiv.querySelector('.cost-map-toggle');
-                        const costSection = resultDiv.querySelector('.cost-section');
-                        const contentWrapper = resultDiv.querySelector('.content-wrapper');
-                        if (costMapToggle && costSection && contentWrapper) {
-                            costMapToggle.addEventListener('click', () => {
-                                const isHidden = costSection.classList.contains('hidden');
-                                if (isHidden) {
-                                    costSection.classList.remove('hidden');
-                                    contentWrapper.classList.remove('cost-map-hidden');
-                                } else {
-                                    costSection.classList.add('hidden');
-                                    contentWrapper.classList.add('cost-map-hidden');
-                                }
-                            });
-                        }
-
-                        // Add hover event listeners
-                        const hoverables = resultDiv.querySelectorAll('.hoverable');
-                        let currentTooltip = null;
-
-                        hoverables.forEach(el => {
-                            el.addEventListener('mouseenter', (e) => {
-                                if (currentTooltip) {
-                                    currentTooltip.remove();
-                                }
-                                const costJson = el.getAttribute('data-cost');
-                                currentTooltip = showTooltip(el, costJson, e);
-                            });
-
-                            el.addEventListener('mousemove', (e) => {
-                                if (currentTooltip) {
-                                    // Update tooltip position as mouse moves, accounting for scroll
-                                    const tooltipRect = currentTooltip.getBoundingClientRect();
-                                    const mouseX = e.clientX + window.scrollX;
-                                    const mouseY = e.clientY + window.scrollY;
-
-                                    let left = mouseX + 15;
-                                    let top = mouseY - 10;
-
-                                    // Adjust if tooltip goes off screen horizontally (viewport-relative)
-                                    const viewportRight = window.innerWidth + window.scrollX - 10;
-                                    if (left + tooltipRect.width > viewportRight) {
-                                        left = mouseX - tooltipRect.width - 15;
-                                    }
-                                    const viewportLeft = window.scrollX + 10;
-                                    if (left < viewportLeft) {
-                                        left = viewportLeft;
-                                    }
-
-                                    // Adjust if tooltip goes off screen vertically (viewport-relative)
-                                    const viewportBottom = window.innerHeight + window.scrollY - 10;
-                                    if (top + tooltipRect.height > viewportBottom) {
-                                        top = viewportBottom - tooltipRect.height;
-                                    }
-                                    const viewportTop = window.scrollY + 10;
-                                    if (top < viewportTop) {
-                                        top = viewportTop;
-                                    }
-
-                                    currentTooltip.style.left = left + 'px';
-                                    currentTooltip.style.top = top + 'px';
-                                }
-                            });
-
-                            el.addEventListener('mouseleave', () => {
-                                if (currentTooltip) {
-                                    currentTooltip.remove();
-                                    currentTooltip = null;
-                                }
-                            });
-                        });
-                    } catch (error) {
-                        resultDiv.innerHTML = `<div class="error">Error: ${error.message}</div>`;
-                    }
-                }
+                await processUrlInput();
             }, 50);
         });
+
+        urlInput.addEventListener('blur', async () => {
+            await processUrlInput();
+        });
+
+        // Handle paste/input events for source
+        sourceInput.addEventListener('paste', async (e) => {
+            setTimeout(async () => {
+                await processSourceInput();
+            }, 50);
+        });
+
+        sourceInput.addEventListener('blur', async () => {
+            await processSourceInput();
+        });
+
+        async function processUrlInput() {
+            const url = urlInput.value.trim();
+
+            // Only post if URL is different from last one and not empty
+            if (url && url !== lastPostedUrl && url.startsWith('http')) {
+                lastPostedUrl = url;
+                resultDiv.innerHTML = '<div class="loading">Loading...</div>';
+
+                try {
+                    const response = await fetch('/contract', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({ url: url })
+                    });
+
+                    if (!response.ok) {
+                        const errorData = await response.json().catch(() => ({}));
+                        throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
+                    }
+
+                    const data = await response.json();
+                    await renderResult(data);
+                } catch (error) {
+                    resultDiv.innerHTML = `<div class="error">Error: ${error.message}</div>`;
+                }
+            }
+        }
+
+        async function processSourceInput() {
+            const source = sourceInput.value.trim();
+
+            // Only post if source is different from last one and not empty
+            if (source && source !== lastPostedSource && source.length > 10) {
+                lastPostedSource = source;
+                resultDiv.innerHTML = '<div class="loading">Loading...</div>';
+
+                try {
+                    const response = await fetch('/contract-source', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({ source: source })
+                    });
+
+                    if (!response.ok) {
+                        const errorData = await response.json().catch(() => ({}));
+                        throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
+                    }
+
+                    const data = await response.json();
+                    await renderResult(data);
+                } catch (error) {
+                    resultDiv.innerHTML = `<div class="error">Error: ${error.message}</div>`;
+                }
+            }
+        }
+
+        async function renderResult(data) {
+            // Render the result
+            const sourceCode = data.source_code || '';
+            const costMap = data.cost_map || {};
+            currentCostMap = costMap; // Store for dropdown updates
+
+            resultDiv.innerHTML = `
+                ${renderTopFunctionsTable(costMap, selectedFocusAttribute)}
+                <div class="content-wrapper cost-map-hidden">
+                    <div class="source-section">
+                        <h2 class="section-title">Source Code</h2>
+                        <div id="sourceCode">${renderSourceCode(sourceCode, costMap)}</div>
+                    </div>
+                    <div class="cost-section hidden">
+                        <h2 class="section-title">Cost Map</h2>
+                        <div id="costTree">${JSON.stringify(costMap, null, 2)}</div>
+                    </div>
+                    <div class="cost-map-toggle"></div>
+                </div>
+            `;
+
+            // Setup top functions table event listeners
+            function setupTopFunctionsListeners() {
+                const topFunctionsHeader = resultDiv.querySelector('.top-functions-header');
+                if (topFunctionsHeader) {
+                    // Remove existing listeners by cloning
+                    const newHeader = topFunctionsHeader.cloneNode(true);
+                    topFunctionsHeader.parentNode.replaceChild(newHeader, topFunctionsHeader);
+
+                    newHeader.addEventListener('click', (e) => {
+                        // Don't toggle if clicking the dropdown
+                        if (e.target.classList.contains('top-functions-focus-select')) {
+                            return;
+                        }
+                        const isCollapsed = newHeader.classList.contains('collapsed');
+                        const table = resultDiv.querySelector('.top-functions-table');
+                        if (isCollapsed) {
+                            newHeader.classList.remove('collapsed');
+                            table.classList.remove('collapsed');
+                        } else {
+                            newHeader.classList.add('collapsed');
+                            table.classList.add('collapsed');
+                        }
+                    });
+                }
+
+                const focusSelect = resultDiv.querySelector('#focusAttributeSelect');
+                if (focusSelect) {
+                    focusSelect.addEventListener('change', (e) => {
+                        selectedFocusAttribute = e.target.value;
+                        updateTopFunctionsTable();
+                    });
+                }
+            }
+
+            function updateTopFunctionsTable() {
+                const topFunctionsContainer = resultDiv.querySelector('.top-functions');
+                if (topFunctionsContainer) {
+                    const wasCollapsed = resultDiv.querySelector('.top-functions-header').classList.contains('collapsed');
+                    topFunctionsContainer.outerHTML = renderTopFunctionsTable(currentCostMap, selectedFocusAttribute);
+
+                    const newHeader = resultDiv.querySelector('.top-functions-header');
+                    const newTable = resultDiv.querySelector('.top-functions-table');
+                    if (wasCollapsed && newHeader && newTable) {
+                        newHeader.classList.add('collapsed');
+                        newTable.classList.add('collapsed');
+                    }
+
+                    setupTopFunctionsListeners();
+                }
+            }
+
+            setupTopFunctionsListeners();
+
+            // Add cost map toggle handler
+            const costMapToggle = resultDiv.querySelector('.cost-map-toggle');
+            const costSection = resultDiv.querySelector('.cost-section');
+            const contentWrapper = resultDiv.querySelector('.content-wrapper');
+            if (costMapToggle && costSection && contentWrapper) {
+                costMapToggle.addEventListener('click', () => {
+                    const isHidden = costSection.classList.contains('hidden');
+                    if (isHidden) {
+                        costSection.classList.remove('hidden');
+                        contentWrapper.classList.remove('cost-map-hidden');
+                    } else {
+                        costSection.classList.add('hidden');
+                        contentWrapper.classList.add('cost-map-hidden');
+                    }
+                });
+            }
+
+            // Add hover event listeners
+            const hoverables = resultDiv.querySelectorAll('.hoverable');
+            let currentTooltip = null;
+
+            hoverables.forEach(el => {
+                el.addEventListener('mouseenter', (e) => {
+                    if (currentTooltip) {
+                        currentTooltip.remove();
+                    }
+                    const costJson = el.getAttribute('data-cost');
+                    currentTooltip = showTooltip(el, costJson, e);
+                });
+
+                el.addEventListener('mousemove', (e) => {
+                    if (currentTooltip) {
+                        // Update tooltip position as mouse moves, accounting for scroll
+                        const tooltipRect = currentTooltip.getBoundingClientRect();
+                        const mouseX = e.clientX + window.scrollX;
+                        const mouseY = e.clientY + window.scrollY;
+
+                        let left = mouseX + 15;
+                        let top = mouseY - 10;
+
+                        // Adjust if tooltip goes off screen horizontally (viewport-relative)
+                        const viewportRight = window.innerWidth + window.scrollX - 10;
+                        if (left + tooltipRect.width > viewportRight) {
+                            left = mouseX - tooltipRect.width - 15;
+                        }
+                        const viewportLeft = window.scrollX + 10;
+                        if (left < viewportLeft) {
+                            left = viewportLeft;
+                        }
+
+                        // Adjust if tooltip goes off screen vertically (viewport-relative)
+                        const viewportBottom = window.innerHeight + window.scrollY - 10;
+                        if (top + tooltipRect.height > viewportBottom) {
+                            top = viewportBottom - tooltipRect.height;
+                        }
+                        const viewportTop = window.scrollY + 10;
+                        if (top < viewportTop) {
+                            top = viewportTop;
+                        }
+
+                        currentTooltip.style.left = left + 'px';
+                        currentTooltip.style.top = top + 'px';
+                    }
+                });
+
+                el.addEventListener('mouseleave', () => {
+                    if (currentTooltip) {
+                        currentTooltip.remove();
+                        currentTooltip = null;
+                    }
+                });
+            });
+        }
     </script>
 </body>
 </html>

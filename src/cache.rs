@@ -40,7 +40,7 @@ impl Cache {
             let source_code: String = row.get(0)?;
             let cost_map_str: String = row.get(1)?;
             let cost_map: Value = serde_json::from_str(&cost_map_str)
-                .map_err(|_e| rusqlite::Error::InvalidColumnType(2, "TEXT".to_string(), rusqlite::types::Type::Text))?;
+                .map_err(|_| rusqlite::Error::InvalidColumnType(2, "TEXT".to_string(), rusqlite::types::Type::Text))?;
             Ok((source_code, cost_map))
         })?;
 
@@ -65,6 +65,43 @@ impl Cache {
             rusqlite::params![url, source_code, cost_map_str, created_at],
         )?;
         Ok(())
+    }
+
+    pub fn get_recent_urls(&self, limit: i32) -> SqlResult<Vec<String>> {
+        let conn = self.conn.lock().unwrap();
+        let mut stmt = conn.prepare(
+            "SELECT url FROM contract_cache WHERE url LIKE 'http%' ORDER BY created_at DESC LIMIT ?1"
+        )?;
+        
+        let rows = stmt.query_map([limit], |row| {
+            let url: String = row.get(0)?;
+            Ok(url)
+        })?;
+
+        let mut urls = Vec::new();
+        for row in rows {
+            urls.push(row?);
+        }
+        Ok(urls)
+    }
+
+    pub fn get_recent_sources(&self, limit: i32) -> SqlResult<Vec<(String, String)>> {
+        let conn = self.conn.lock().unwrap();
+        let mut stmt = conn.prepare(
+            "SELECT url, source_code FROM contract_cache WHERE url NOT LIKE 'http%' ORDER BY created_at DESC LIMIT ?1"
+        )?;
+        
+        let rows = stmt.query_map([limit], |row| {
+            let url: String = row.get(0)?;
+            let source_code: String = row.get(1)?;
+            Ok((url, source_code))
+        })?;
+
+        let mut sources = Vec::new();
+        for row in rows {
+            sources.push(row?);
+        }
+        Ok(sources)
     }
 }
 
