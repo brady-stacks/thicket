@@ -26,6 +26,19 @@
         h1 {
             color: #b58900; /* Solarized yellow */
             margin-top: 0;
+            margin-bottom: 5px;
+            text-align: center;
+            font-size: 36px;
+            font-weight: bold;
+        }
+        h3 {
+            color: #93a1a1; /* Solarized base1 */
+            margin-top: 0;
+            margin-bottom: 20px;
+            text-align: center;
+            font-size: 18px;
+            font-weight: normal;
+            font-style: italic;
         }
         #urlInput {
             width: 100%;
@@ -288,8 +301,9 @@
 </head>
 <body>
     <div class="container">
-        <h1>Thicket - Clarity Cost Analysis</h1>
-        <p style="color: #93a1a1;">Paste a Hiro Explorer contract URL to analyze its cost structure:</p>
+        <h1>Thicket</h1>
+        <h3>Clarity Static Cost Analysis</h3>
+        <p style="color: #93a1a1;">Paste a mainnet contract URL to analyze its static cost:</p>
         <input
             type="text"
             id="urlInput"
@@ -320,17 +334,19 @@
                 const anchorId = `func-${funcName.replace(/[^a-zA-Z0-9]/g, '-')}`;
                 let anchorAdded = false;
 
-                // Find all function name occurrences
-                const funcRegex = new RegExp(`\\b${escapedName}\\b`, 'g');
+                // Find all function name occurrences - only match when preceded by opening parenthesis
+                const funcRegex = new RegExp(`\\(${escapedName}\\b`, 'g');
                 const allMatches = [];
 
                 // Collect all matches
                 let match;
                 while ((match = funcRegex.exec(html)) !== null) {
+                    // Match includes the opening paren, but we only want to highlight the function name
+                    // So adjust index to skip the paren and length to exclude it
                     allMatches.push({
-                        index: match.index,
-                        length: match[0].length,
-                        text: match[0]
+                        index: match.index + 1, // Skip the opening paren
+                        length: match[0].length - 1, // Exclude the opening paren
+                        text: match[0].substring(1) // Function name without the paren
                     });
                 }
 
@@ -352,15 +368,15 @@
                     const isDefinition = defMatches.has(match.index);
                     const costData = costMap[funcName];
                     const costJson = JSON.stringify(costData, null, 2);
-                    
+
                     let replacement = `<span class="hoverable" data-cost='${escapeHtml(costJson)}'>${match.text}</span>`;
-                    
+
                     // Add anchor before function definition (only once, for the first definition found)
                     if (isDefinition && !anchorAdded) {
                         replacement = `<span id="${anchorId}" class="function-anchor"></span>${replacement}`;
                         anchorAdded = true;
                     }
-                    
+
                     html = html.substring(0, match.index) + replacement + html.substring(match.index + match.length);
                 }
             });
@@ -575,7 +591,7 @@
                                 // Remove existing listeners by cloning
                                 const newHeader = topFunctionsHeader.cloneNode(true);
                                 topFunctionsHeader.parentNode.replaceChild(newHeader, topFunctionsHeader);
-                                
+
                                 newHeader.addEventListener('click', (e) => {
                                     // Don't toggle if clicking the dropdown
                                     if (e.target.classList.contains('top-functions-focus-select')) {
@@ -592,7 +608,7 @@
                                     }
                                 });
                             }
-                            
+
                             const focusSelect = resultDiv.querySelector('#focusAttributeSelect');
                             if (focusSelect) {
                                 focusSelect.addEventListener('change', (e) => {
@@ -601,24 +617,24 @@
                                 });
                             }
                         }
-                        
+
                         function updateTopFunctionsTable() {
                             const topFunctionsContainer = resultDiv.querySelector('.top-functions');
                             if (topFunctionsContainer) {
                                 const wasCollapsed = resultDiv.querySelector('.top-functions-header').classList.contains('collapsed');
                                 topFunctionsContainer.outerHTML = renderTopFunctionsTable(currentCostMap, selectedFocusAttribute);
-                                
+
                                 const newHeader = resultDiv.querySelector('.top-functions-header');
                                 const newTable = resultDiv.querySelector('.top-functions-table');
                                 if (wasCollapsed && newHeader && newTable) {
                                     newHeader.classList.add('collapsed');
                                     newTable.classList.add('collapsed');
                                 }
-                                
+
                                 setupTopFunctionsListeners();
                             }
                         }
-                        
+
                         setupTopFunctionsListeners();
 
                         // Add cost map toggle handler
