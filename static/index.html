@@ -202,6 +202,19 @@
             return div.innerHTML;
         }
 
+        function formatNumber(num) {
+            return num.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+        }
+
+        function formatRange(min, max) {
+            const formattedMin = formatNumber(min);
+            const formattedMax = formatNumber(max);
+            if (min === max) {
+                return formattedMin;
+            }
+            return `${formattedMin} - ${formattedMax}`;
+        }
+
         function showTooltip(element, costJson, event) {
             const tooltip = document.createElement('div');
             tooltip.className = 'tooltip';
@@ -211,12 +224,11 @@
                 let html = '<div class="tooltip-title">Cost Information</div>';
                 
                 if (cost.cost) {
-                    html += `<div class="cost-item"><span class="cost-label">Min Runtime:</span> <span class="cost-value">${cost.cost.min.runtime}</span></div>`;
-                    html += `<div class="cost-item"><span class="cost-label">Max Runtime:</span> <span class="cost-value">${cost.cost.max.runtime}</span></div>`;
-                    html += `<div class="cost-item"><span class="cost-label">Read Count:</span> <span class="cost-value">${cost.cost.min.read_count} - ${cost.cost.max.read_count}</span></div>`;
-                    html += `<div class="cost-item"><span class="cost-label">Read Length:</span> <span class="cost-value">${cost.cost.min.read_length} - ${cost.cost.max.read_length}</span></div>`;
-                    html += `<div class="cost-item"><span class="cost-label">Write Count:</span> <span class="cost-value">${cost.cost.min.write_count} - ${cost.cost.max.write_count}</span></div>`;
-                    html += `<div class="cost-item"><span class="cost-label">Write Length:</span> <span class="cost-value">${cost.cost.min.write_length} - ${cost.cost.max.write_length}</span></div>`;
+                    html += `<div class="cost-item"><span class="cost-label">Runtime:</span> <span class="cost-value">${formatRange(cost.cost.min.runtime, cost.cost.max.runtime)}</span></div>`;
+                    html += `<div class="cost-item"><span class="cost-label">Read Count:</span> <span class="cost-value">${formatRange(cost.cost.min.read_count, cost.cost.max.read_count)}</span></div>`;
+                    html += `<div class="cost-item"><span class="cost-label">Read Length:</span> <span class="cost-value">${formatRange(cost.cost.min.read_length, cost.cost.max.read_length)}</span></div>`;
+                    html += `<div class="cost-item"><span class="cost-label">Write Count:</span> <span class="cost-value">${formatRange(cost.cost.min.write_count, cost.cost.max.write_count)}</span></div>`;
+                    html += `<div class="cost-item"><span class="cost-label">Write Length:</span> <span class="cost-value">${formatRange(cost.cost.min.write_length, cost.cost.max.write_length)}</span></div>`;
                 }
                 
                 if (cost.trait_count) {
