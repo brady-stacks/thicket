@@ -1,0 +1,376 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Thicket - Clarity Cost Analysis</title>
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+        body {
+            font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', 'Consolas', 'source-code-pro', monospace;
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #002b36; /* Solarized base03 */
+            color: #839496; /* Solarized base0 */
+            line-height: 1.6;
+        }
+        .container {
+            background: #073642; /* Solarized base02 */
+            border-radius: 8px;
+            padding: 30px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+        }
+        h1 {
+            color: #b58900; /* Solarized yellow */
+            margin-top: 0;
+        }
+        #urlInput {
+            width: 100%;
+            padding: 12px;
+            font-size: 14px;
+            border: 2px solid #586e75; /* Solarized base01 */
+            border-radius: 4px;
+            box-sizing: border-box;
+            margin-bottom: 20px;
+            background-color: #002b36; /* Solarized base03 */
+            color: #839496; /* Solarized base0 */
+            font-family: inherit;
+        }
+        #urlInput:focus {
+            outline: none;
+            border-color: #268bd2; /* Solarized blue */
+        }
+        .content-wrapper {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            margin-top: 20px;
+        }
+        @media (max-width: 1200px) {
+            .content-wrapper {
+                grid-template-columns: 1fr;
+            }
+        }
+        .source-section, .cost-section {
+            background: #002b36; /* Solarized base03 */
+            border-radius: 4px;
+            padding: 15px;
+            border: 1px solid #586e75; /* Solarized base01 */
+        }
+        .section-title {
+            color: #859900; /* Solarized green */
+            margin-top: 0;
+            margin-bottom: 15px;
+            font-size: 18px;
+        }
+        #sourceCode {
+            white-space: pre;
+            overflow-x: auto;
+            font-size: 13px;
+            line-height: 1.6;
+            padding: 15px;
+            background: #002b36; /* Solarized base03 */
+            border-radius: 4px;
+            margin: 0;
+            color: #839496; /* Solarized base0 */
+            font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', 'Consolas', 'source-code-pro', monospace;
+        }
+        #sourceCode .hoverable {
+            cursor: help;
+            position: relative;
+            color: #b58900; /* Solarized yellow/orange - same as header */
+            font-weight: 500;
+        }
+        #sourceCode .hoverable:hover {
+            background-color: #073642; /* Solarized base02 */
+        }
+        .tooltip {
+            position: absolute;
+            background: #073642; /* Solarized base02 */
+            border: 1px solid #586e75; /* Solarized base01 */
+            border-radius: 4px;
+            padding: 10px;
+            z-index: 1000;
+            min-width: 200px;
+            max-width: 400px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.5);
+            font-size: 12px;
+            color: #839496; /* Solarized base0 */
+            pointer-events: none;
+        }
+        .tooltip .tooltip-title {
+            color: #859900; /* Solarized green */
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+        .tooltip .cost-item {
+            margin: 3px 0;
+        }
+        .tooltip .cost-label {
+            color: #93a1a1; /* Solarized base1 */
+        }
+        .tooltip .cost-value {
+            color: #268bd2; /* Solarized blue */
+        }
+        #costTree {
+            max-height: 600px;
+            overflow-y: auto;
+            padding: 15px;
+            background: #002b36; /* Solarized base03 */
+            border-radius: 4px;
+            font-size: 12px;
+            white-space: pre-wrap;
+            font-family: inherit;
+        }
+        .loading {
+            color: #586e75; /* Solarized base01 */
+            font-style: italic;
+        }
+        .error {
+            color: #dc322f; /* Solarized red */
+            background-color: #073642; /* Solarized base02 */
+            border-color: #dc322f; /* Solarized red */
+            padding: 15px;
+            border-radius: 4px;
+            margin-top: 20px;
+        }
+        .result {
+            margin-top: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Thicket - Clarity Cost Analysis</h1>
+        <p style="color: #93a1a1;">Paste a Hiro Explorer contract URL to analyze its cost structure:</p>
+        <input 
+            type="text" 
+            id="urlInput" 
+            placeholder="https://explorer.hiro.so/txid/SP3YBY0BH4ANC0Q35QB6PD163F943FVFVDFM1SH7S.gl-api?chain=mainnet&tab=sourceCode"
+        />
+        <div id="result"></div>
+    </div>
+
+    <script>
+        const urlInput = document.getElementById('urlInput');
+        const resultDiv = document.getElementById('result');
+        let lastPostedUrl = '';
+        let costTreeData = {};
+
+        function renderSourceCode(sourceCode, costMap) {
+            costTreeData = costMap;
+            // Plain text with no syntax highlighting
+            let html = escapeHtml(sourceCode);
+            
+            // Create hoverable spans for function names
+            const functionNames = Object.keys(costMap);
+            
+            functionNames.forEach(funcName => {
+                // Create a regex to find function definitions and usages
+                const funcRegex = new RegExp(`\\b${funcName}\\b`, 'g');
+                const matches = [];
+                
+                // Collect all matches with their positions
+                let match;
+                while ((match = funcRegex.exec(html)) !== null) {
+                    matches.push({
+                        index: match.index,
+                        length: match[0].length,
+                        text: match[0]
+                    });
+                }
+                
+                // Process matches in reverse order to preserve indices
+                for (let i = matches.length - 1; i >= 0; i--) {
+                    const match = matches[i];
+                    const costData = costMap[funcName];
+                    const costJson = JSON.stringify(costData, null, 2);
+                    const replacement = `<span class="hoverable" data-cost='${escapeHtml(costJson)}'>${match.text}</span>`;
+                    html = html.substring(0, match.index) + replacement + html.substring(match.index + match.length);
+                }
+            });
+            
+            return html;
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        function showTooltip(element, costJson, event) {
+            const tooltip = document.createElement('div');
+            tooltip.className = 'tooltip';
+            
+            try {
+                const cost = JSON.parse(costJson);
+                let html = '<div class="tooltip-title">Cost Information</div>';
+                
+                if (cost.cost) {
+                    html += `<div class="cost-item"><span class="cost-label">Min Runtime:</span> <span class="cost-value">${cost.cost.min.runtime}</span></div>`;
+                    html += `<div class="cost-item"><span class="cost-label">Max Runtime:</span> <span class="cost-value">${cost.cost.max.runtime}</span></div>`;
+                    html += `<div class="cost-item"><span class="cost-label">Read Count:</span> <span class="cost-value">${cost.cost.min.read_count} - ${cost.cost.max.read_count}</span></div>`;
+                    html += `<div class="cost-item"><span class="cost-label">Read Length:</span> <span class="cost-value">${cost.cost.min.read_length} - ${cost.cost.max.read_length}</span></div>`;
+                    html += `<div class="cost-item"><span class="cost-label">Write Count:</span> <span class="cost-value">${cost.cost.min.write_count} - ${cost.cost.max.write_count}</span></div>`;
+                    html += `<div class="cost-item"><span class="cost-label">Write Length:</span> <span class="cost-value">${cost.cost.min.write_length} - ${cost.cost.max.write_length}</span></div>`;
+                }
+                
+                if (cost.trait_count) {
+                    html += `<div class="cost-item" style="margin-top: 8px;"><span class="cost-label">Trait Count:</span> <span class="cost-value">${JSON.stringify(cost.trait_count)}</span></div>`;
+                }
+                
+                tooltip.innerHTML = html;
+            } catch (e) {
+                tooltip.innerHTML = '<div class="tooltip-title">Cost Data</div><pre>' + escapeHtml(costJson) + '</pre>';
+            }
+            
+            document.body.appendChild(tooltip);
+            
+            // Use mouse position from event, accounting for scroll position
+            const mouseX = event.clientX + window.scrollX;
+            const mouseY = event.clientY + window.scrollY;
+            const tooltipRect = tooltip.getBoundingClientRect();
+            
+            // Position tooltip to the right of cursor with small offset
+            let left = mouseX + 15;
+            let top = mouseY - 10;
+            
+            // Adjust if tooltip goes off screen horizontally (viewport-relative)
+            const viewportRight = window.innerWidth + window.scrollX - 10;
+            if (left + tooltipRect.width > viewportRight) {
+                // If it would go off right edge, position to the left of cursor instead
+                left = mouseX - tooltipRect.width - 15;
+            }
+            const viewportLeft = window.scrollX + 10;
+            if (left < viewportLeft) {
+                left = viewportLeft;
+            }
+            
+            // Adjust if tooltip goes off screen vertically (viewport-relative)
+            const viewportBottom = window.innerHeight + window.scrollY - 10;
+            if (top + tooltipRect.height > viewportBottom) {
+                top = viewportBottom - tooltipRect.height;
+            }
+            const viewportTop = window.scrollY + 10;
+            if (top < viewportTop) {
+                top = viewportTop;
+            }
+            
+            tooltip.style.left = left + 'px';
+            tooltip.style.top = top + 'px';
+            
+            return tooltip;
+        }
+
+        // Handle paste event - posts immediately when URL is pasted
+        urlInput.addEventListener('paste', async (e) => {
+            // Wait for paste to complete
+            setTimeout(async () => {
+                const url = urlInput.value.trim();
+                
+                // Only post if URL is different from last one and not empty
+                if (url && url !== lastPostedUrl && url.startsWith('http')) {
+                    lastPostedUrl = url;
+                    resultDiv.innerHTML = '<div class="loading">Loading...</div>';
+                    
+                    try {
+                        const response = await fetch('/contract', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                            },
+                            body: JSON.stringify({ url: url })
+                        });
+                        
+                        if (!response.ok) {
+                            const errorData = await response.json().catch(() => ({}));
+                            throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
+                        }
+                        
+                        const data = await response.json();
+                        
+                        // Render the result
+                        const sourceCode = data.source_code || '';
+                        const costMap = data.cost_map || {};
+                        
+                        resultDiv.innerHTML = `
+                            <div class="content-wrapper">
+                                <div class="source-section">
+                                    <h2 class="section-title">Source Code</h2>
+                                    <div id="sourceCode">${renderSourceCode(sourceCode, costMap)}</div>
+                                </div>
+                                <div class="cost-section">
+                                    <h2 class="section-title">Cost Map</h2>
+                                    <div id="costTree">${JSON.stringify(costMap, null, 2)}</div>
+                                </div>
+                            </div>
+                        `;
+                        
+                        // Add hover event listeners
+                        const hoverables = resultDiv.querySelectorAll('.hoverable');
+                        let currentTooltip = null;
+                        
+                        hoverables.forEach(el => {
+                            el.addEventListener('mouseenter', (e) => {
+                                if (currentTooltip) {
+                                    currentTooltip.remove();
+                                }
+                                const costJson = el.getAttribute('data-cost');
+                                currentTooltip = showTooltip(el, costJson, e);
+                            });
+                            
+                            el.addEventListener('mousemove', (e) => {
+                                if (currentTooltip) {
+                                    // Update tooltip position as mouse moves, accounting for scroll
+                                    const tooltipRect = currentTooltip.getBoundingClientRect();
+                                    const mouseX = e.clientX + window.scrollX;
+                                    const mouseY = e.clientY + window.scrollY;
+                                    
+                                    let left = mouseX + 15;
+                                    let top = mouseY - 10;
+                                    
+                                    // Adjust if tooltip goes off screen horizontally (viewport-relative)
+                                    const viewportRight = window.innerWidth + window.scrollX - 10;
+                                    if (left + tooltipRect.width > viewportRight) {
+                                        left = mouseX - tooltipRect.width - 15;
+                                    }
+                                    const viewportLeft = window.scrollX + 10;
+                                    if (left < viewportLeft) {
+                                        left = viewportLeft;
+                                    }
+                                    
+                                    // Adjust if tooltip goes off screen vertically (viewport-relative)
+                                    const viewportBottom = window.innerHeight + window.scrollY - 10;
+                                    if (top + tooltipRect.height > viewportBottom) {
+                                        top = viewportBottom - tooltipRect.height;
+                                    }
+                                    const viewportTop = window.scrollY + 10;
+                                    if (top < viewportTop) {
+                                        top = viewportTop;
+                                    }
+                                    
+                                    currentTooltip.style.left = left + 'px';
+                                    currentTooltip.style.top = top + 'px';
+                                }
+                            });
+                            
+                            el.addEventListener('mouseleave', () => {
+                                if (currentTooltip) {
+                                    currentTooltip.remove();
+                                    currentTooltip = null;
+                                }
+                            });
+                        });
+                    } catch (error) {
+                        resultDiv.innerHTML = `<div class="error">Error: ${error.message}</div>`;
+                    }
+                }
+            }, 50);
+        });
+    </script>
+</body>
+</html>

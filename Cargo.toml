@@ -1,0 +1,22 @@
+[package]
+name = "thicket"
+version = "0.1.0"
+edition = "2021"
+resolver = "2"
+
+[dependencies]
+axum = "0.7"
+tokio = { version = "1", features = ["full"] }
+tower = "0.4"
+tower-http = { version = "0.5", features = ["fs"] }
+serde = "1"
+serde_json = { version = "1.0", features = ["arbitrary_precision", "unbounded_depth"] }
+reqwest = { version = "0.11", features = ["json"] }
+scraper = "0.19"
+regex = "1"
+# Stacks-core dependencies from commit ac9083870cdb8f49e9e450e0dbe3b5ec706bc2f6
+clarity = { git = "https://github.com/brady-stacks/stacks-core", rev = "ac9083870cdb8f49e9e450e0dbe3b5ec706bc2f6", features = ["developer-mode"] }
+
+stacks_common = { package = "stacks-common", git = "https://github.com/brady-stacks/stacks-core", rev = "ac9083870cdb8f49e9e450e0dbe3b5ec706bc2f6", default-features = false }
+clarity_types = { package = "clarity-types", git = "https://github.com/brady-stacks/stacks-core", rev = "ac9083870cdb8f49e9e450e0dbe3b5ec706bc2f6", default-features = false }
+stackslib = { git = "https://github.com/brady-stacks/stacks-core", rev = "ac9083870cdb8f49e9e450e0dbe3b5ec706bc2f6" }
