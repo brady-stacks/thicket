@@ -7,15 +7,48 @@ use reqwest;
 use scraper::{Html, Selector};
 use serde_json::json;
 use stacks_common::types::StacksEpochId;
+use std::sync::Arc;
+use crate::cache::Cache;
 
-pub async fn process_contract_url(url: &str) -> Result<serde_json::Value, Box<dyn std::error::Error>> {
+pub async fn process_contract_url(url: &str, cache: Arc<Cache>) -> Result<serde_json::Value, Box<dyn std::error::Error>> {
+    // Step 1: Check cache first
+    let cache_key = url;
+    let cache_result = tokio::task::spawn_blocking({
+        let cache = cache.clone();
+        let url = cache_key.to_string();
+        move || cache.get(&url)
+    }).await.map_err(|e| format!("Cache lookup error: {}", e))?;
+
+    if let Ok(Some((cached_source_code, cached_cost_map))) = cache_result {
+        println!("Cache hit for URL: {}", url);
+        return Ok(json!({
+            "source_code": cached_source_code,
+            "cost_map": cached_cost_map
+        }));
+    }
+
+    println!("Cache miss for URL: {}", url);
+    
     // Step 2: Fetch source code from the URL
     let source_code = fetch_source_code(url).await?;
     
     // Step 3: Process the source code using static_cost_map
     let cost_map = analyze_contract_source(&source_code)?;
     
-    // Step 4: Return both source code and cost map as JSON
+    // Step 4: Store in cache
+    let cache_key_clone = cache_key.to_string();
+    let source_code_clone = source_code.clone();
+    let cost_map_clone = cost_map.clone();
+    tokio::task::spawn_blocking({
+        let cache = cache.clone();
+        move || {
+            if let Err(e) = cache.set(&cache_key_clone, &source_code_clone, &cost_map_clone) {
+                eprintln!("Warning: Failed to cache result: {}", e);
+            }
+        }
+    }).await.ok();
+    
+    // Step 5: Return both source code and cost map as JSON
     Ok(json!({
         "source_code": source_code,
         "cost_map": cost_map

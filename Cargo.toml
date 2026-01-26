@@ -14,6 +14,7 @@ serde_json = { version = "1.0", features = ["arbitrary_precision", "unbounded_de
 reqwest = { version = "0.11", features = ["json"] }
 scraper = "0.19"
 regex = "1"
+rusqlite = { version = "0.31", features = ["bundled"] }
 # Stacks-core dependencies from commit ac9083870cdb8f49e9e450e0dbe3b5ec706bc2f6
 clarity = { git = "https://github.com/brady-stacks/stacks-core", rev = "ac9083870cdb8f49e9e450e0dbe3b5ec706bc2f6", features = ["developer-mode"] }
 

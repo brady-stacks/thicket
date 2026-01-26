@@ -140,15 +140,118 @@
         .result {
             margin-top: 20px;
         }
+        .top-functions {
+            margin-bottom: 20px;
+        }
+        .top-functions-header {
+            background: #002b36; /* Solarized base03 */
+            border: 1px solid #586e75; /* Solarized base01 */
+            border-radius: 4px;
+            padding: 10px 15px;
+            cursor: pointer;
+            user-select: none;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            color: #859900; /* Solarized green */
+            font-weight: bold;
+        }
+        .top-functions-header-content {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            flex: 1;
+        }
+        .top-functions-focus-select {
+            background: #073642; /* Solarized base02 */
+            border: 1px solid #586e75; /* Solarized base01 */
+            border-radius: 3px;
+            padding: 4px 8px;
+            color: #839496; /* Solarized base0 */
+            font-family: inherit;
+            font-size: 12px;
+            cursor: pointer;
+            outline: none;
+        }
+        .top-functions-focus-select:hover {
+            background: #002b36; /* Solarized base03 */
+        }
+        .top-functions-focus-select:focus {
+            border-color: #268bd2; /* Solarized blue */
+        }
+        .top-functions-header:hover {
+            background: #073642; /* Solarized base02 */
+        }
+        .top-functions-header::after {
+            content: '▼';
+            font-size: 12px;
+            transition: transform 0.2s;
+        }
+        .top-functions-header.collapsed::after {
+            transform: rotate(-90deg);
+        }
+        .top-functions-table {
+            background: #002b36; /* Solarized base03 */
+            border: 1px solid #586e75; /* Solarized base01 */
+            border-top: none;
+            border-radius: 0 0 4px 4px;
+            overflow: hidden;
+        }
+        .top-functions-table.collapsed {
+            display: none;
+        }
+        .top-functions-table table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        .top-functions-table th {
+            background: #073642; /* Solarized base02 */
+            color: #859900; /* Solarized green */
+            padding: 10px;
+            text-align: left;
+            font-weight: bold;
+            border-bottom: 1px solid #586e75; /* Solarized base01 */
+        }
+        .top-functions-table td {
+            padding: 8px 10px;
+            border-bottom: 1px solid #586e75; /* Solarized base01 */
+            color: #839496; /* Solarized base0 */
+        }
+        .top-functions-table tr:last-child td {
+            border-bottom: none;
+        }
+        .top-functions-table tr:hover {
+            background: #073642; /* Solarized base02 */
+        }
+        .top-functions-table .function-name {
+            color: #b58900; /* Solarized yellow */
+            font-weight: 500;
+        }
+        .top-functions-table .function-name a {
+            color: #b58900; /* Solarized yellow */
+            text-decoration: none;
+            cursor: pointer;
+        }
+        .top-functions-table .function-name a:hover {
+            text-decoration: underline;
+            color: #d33682; /* Solarized magenta */
+        }
+        .top-functions-table .runtime-value {
+            color: #268bd2; /* Solarized blue */
+            text-align: right;
+        }
+        #sourceCode .function-anchor {
+            scroll-margin-top: 20px;
+        }
     </style>
 </head>
 <body>
     <div class="container">
         <h1>Thicket - Clarity Cost Analysis</h1>
         <p style="color: #93a1a1;">Paste a Hiro Explorer contract URL to analyze its cost structure:</p>
-        <input 
-            type="text" 
-            id="urlInput" 
+        <input
+            type="text"
+            id="urlInput"
             placeholder="https://explorer.hiro.so/txid/SP3YBY0BH4ANC0Q35QB6PD163F943FVFVDFM1SH7S.gl-api?chain=mainnet&tab=sourceCode"
         />
         <div id="result"></div>
@@ -159,40 +262,68 @@
         const resultDiv = document.getElementById('result');
         let lastPostedUrl = '';
         let costTreeData = {};
+        let currentCostMap = {};
+        let selectedFocusAttribute = 'runtime';
 
         function renderSourceCode(sourceCode, costMap) {
             costTreeData = costMap;
             // Plain text with no syntax highlighting
             let html = escapeHtml(sourceCode);
-            
+
             // Create hoverable spans for function names
             const functionNames = Object.keys(costMap);
-            
-            functionNames.forEach(funcName => {
-                // Create a regex to find function definitions and usages
-                const funcRegex = new RegExp(`\\b${funcName}\\b`, 'g');
-                const matches = [];
-                
-                // Collect all matches with their positions
+            const escapedFuncNames = functionNames.map(name => name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+
+            functionNames.forEach((funcName, funcIdx) => {
+                const escapedName = escapedFuncNames[funcIdx];
+                const anchorId = `func-${funcName.replace(/[^a-zA-Z0-9]/g, '-')}`;
+                let anchorAdded = false;
+
+                // Find all function name occurrences
+                const funcRegex = new RegExp(`\\b${escapedName}\\b`, 'g');
+                const allMatches = [];
+
+                // Collect all matches
                 let match;
                 while ((match = funcRegex.exec(html)) !== null) {
-                    matches.push({
+                    allMatches.push({
                         index: match.index,
                         length: match[0].length,
                         text: match[0]
                     });
                 }
-                
+
+                // Check which matches are function definitions by looking backwards
+                // Clarity: (define-public (func-name, (define-private (func-name, (define-read-only (func-name
+                const defMatches = new Set();
+                allMatches.forEach(m => {
+                    const beforeMatch = html.substring(Math.max(0, m.index - 30), m.index);
+                    // Check if this is a function definition - pattern should end with opening paren before function name
+                    // Match: (define-public ( or (define-private ( or (define-read-only (
+                    if (/\(define-(public|private|read-only)\s+\($/.test(beforeMatch)) {
+                        defMatches.add(m.index);
+                    }
+                });
+
                 // Process matches in reverse order to preserve indices
-                for (let i = matches.length - 1; i >= 0; i--) {
-                    const match = matches[i];
+                for (let i = allMatches.length - 1; i >= 0; i--) {
+                    const match = allMatches[i];
+                    const isDefinition = defMatches.has(match.index);
                     const costData = costMap[funcName];
                     const costJson = JSON.stringify(costData, null, 2);
-                    const replacement = `<span class="hoverable" data-cost='${escapeHtml(costJson)}'>${match.text}</span>`;
+                    
+                    let replacement = `<span class="hoverable" data-cost='${escapeHtml(costJson)}'>${match.text}</span>`;
+                    
+                    // Add anchor before function definition (only once, for the first definition found)
+                    if (isDefinition && !anchorAdded) {
+                        replacement = `<span id="${anchorId}" class="function-anchor"></span>${replacement}`;
+                        anchorAdded = true;
+                    }
+                    
                     html = html.substring(0, match.index) + replacement + html.substring(match.index + match.length);
                 }
             });
-            
+
             return html;
         }
 
@@ -215,14 +346,85 @@
             return `${formattedMin} - ${formattedMax}`;
         }
 
+        function getAttributeLabel(attribute) {
+            const labels = {
+                'runtime': 'Runtime',
+                'read_count': 'Read Count',
+                'read_length': 'Read Length',
+                'write_count': 'Write Count',
+                'write_length': 'Write Length'
+            };
+            return labels[attribute] || attribute;
+        }
+
+        function getTop5FunctionsByAttribute(costMap, attribute = 'runtime') {
+            const functions = Object.keys(costMap)
+                .map(funcName => {
+                    const cost = costMap[funcName];
+                    if (cost && cost.cost && cost.cost.max && cost.cost.max[attribute] !== undefined) {
+                        return {
+                            name: funcName,
+                            value: cost.cost.max[attribute],
+                            attribute: attribute
+                        };
+                    }
+                    return null;
+                })
+                .filter(f => f !== null)
+                .sort((a, b) => b.value - a.value)
+                .slice(0, 5);
+
+            return functions;
+        }
+
+        function renderTopFunctionsTable(costMap, selectedAttribute = 'runtime') {
+            const topFunctions = getTop5FunctionsByAttribute(costMap, selectedAttribute);
+
+            if (topFunctions.length === 0) {
+                return '';
+            }
+
+            const attributeLabel = getAttributeLabel(selectedAttribute);
+            const attributes = ['runtime', 'read_count', 'read_length', 'write_count', 'write_length'];
+
+            let tableHtml = '<div class="top-functions">';
+            tableHtml += '<div class="top-functions-header">';
+            tableHtml += '<div class="top-functions-header-content">';
+            tableHtml += '<span>Hungry Functions</span>';
+            tableHtml += '<select class="top-functions-focus-select" id="focusAttributeSelect">';
+            attributes.forEach(attr => {
+                const selected = attr === selectedAttribute ? 'selected' : '';
+                tableHtml += `<option value="${attr}" ${selected}>${getAttributeLabel(attr)}</option>`;
+            });
+            tableHtml += '</select>';
+            tableHtml += '</div>';
+            tableHtml += '</div>';
+            tableHtml += '<div class="top-functions-table">';
+            tableHtml += '<table>';
+            tableHtml += `<thead><tr><th>Function</th><th style="text-align: right;">Max ${attributeLabel}</th></tr></thead>`;
+            tableHtml += '<tbody>';
+
+            topFunctions.forEach(func => {
+                const anchorId = `func-${func.name.replace(/[^a-zA-Z0-9]/g, '-')}`;
+                tableHtml += `<tr>
+                    <td class="function-name"><a href="#${anchorId}" onclick="document.getElementById('${anchorId}').scrollIntoView({ behavior: 'smooth', block: 'center' }); return false;">${escapeHtml(func.name)}</a></td>
+                    <td class="runtime-value">${formatNumber(func.value)}</td>
+                </tr>`;
+            });
+
+            tableHtml += '</tbody></table></div></div>';
+
+            return tableHtml;
+        }
+
         function showTooltip(element, costJson, event) {
             const tooltip = document.createElement('div');
             tooltip.className = 'tooltip';
-            
+
             try {
                 const cost = JSON.parse(costJson);
                 let html = '<div class="tooltip-title">Cost Information</div>';
-                
+
                 if (cost.cost) {
                     html += `<div class="cost-item"><span class="cost-label">Runtime:</span> <span class="cost-value">${formatRange(cost.cost.min.runtime, cost.cost.max.runtime)}</span></div>`;
                     html += `<div class="cost-item"><span class="cost-label">Read Count:</span> <span class="cost-value">${formatRange(cost.cost.min.read_count, cost.cost.max.read_count)}</span></div>`;
@@ -230,27 +432,27 @@
                     html += `<div class="cost-item"><span class="cost-label">Write Count:</span> <span class="cost-value">${formatRange(cost.cost.min.write_count, cost.cost.max.write_count)}</span></div>`;
                     html += `<div class="cost-item"><span class="cost-label">Write Length:</span> <span class="cost-value">${formatRange(cost.cost.min.write_length, cost.cost.max.write_length)}</span></div>`;
                 }
-                
+
                 if (cost.trait_count) {
                     html += `<div class="cost-item" style="margin-top: 8px;"><span class="cost-label">Trait Count:</span> <span class="cost-value">${JSON.stringify(cost.trait_count)}</span></div>`;
                 }
-                
+
                 tooltip.innerHTML = html;
             } catch (e) {
                 tooltip.innerHTML = '<div class="tooltip-title">Cost Data</div><pre>' + escapeHtml(costJson) + '</pre>';
             }
-            
+
             document.body.appendChild(tooltip);
-            
+
             // Use mouse position from event, accounting for scroll position
             const mouseX = event.clientX + window.scrollX;
             const mouseY = event.clientY + window.scrollY;
             const tooltipRect = tooltip.getBoundingClientRect();
-            
+
             // Position tooltip to the right of cursor with small offset
             let left = mouseX + 15;
             let top = mouseY - 10;
-            
+
             // Adjust if tooltip goes off screen horizontally (viewport-relative)
             const viewportRight = window.innerWidth + window.scrollX - 10;
             if (left + tooltipRect.width > viewportRight) {
@@ -261,7 +463,7 @@
             if (left < viewportLeft) {
                 left = viewportLeft;
             }
-            
+
             // Adjust if tooltip goes off screen vertically (viewport-relative)
             const viewportBottom = window.innerHeight + window.scrollY - 10;
             if (top + tooltipRect.height > viewportBottom) {
@@ -271,10 +473,10 @@
             if (top < viewportTop) {
                 top = viewportTop;
             }
-            
+
             tooltip.style.left = left + 'px';
             tooltip.style.top = top + 'px';
-            
+
             return tooltip;
         }
 
@@ -283,12 +485,12 @@
             // Wait for paste to complete
             setTimeout(async () => {
                 const url = urlInput.value.trim();
-                
+
                 // Only post if URL is different from last one and not empty
                 if (url && url !== lastPostedUrl && url.startsWith('http')) {
                     lastPostedUrl = url;
                     resultDiv.innerHTML = '<div class="loading">Loading...</div>';
-                    
+
                     try {
                         const response = await fetch('/contract', {
                             method: 'POST',
@@ -297,19 +499,21 @@
                             },
                             body: JSON.stringify({ url: url })
                         });
-                        
+
                         if (!response.ok) {
                             const errorData = await response.json().catch(() => ({}));
                             throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
                         }
-                        
+
                         const data = await response.json();
-                        
+
                         // Render the result
                         const sourceCode = data.source_code || '';
                         const costMap = data.cost_map || {};
-                        
+                        currentCostMap = costMap; // Store for dropdown updates
+
                         resultDiv.innerHTML = `
+                            ${renderTopFunctionsTable(costMap, selectedFocusAttribute)}
                             <div class="content-wrapper">
                                 <div class="source-section">
                                     <h2 class="section-title">Source Code</h2>
@@ -321,11 +525,64 @@
                                 </div>
                             </div>
                         `;
+
+                        // Setup top functions table event listeners
+                        function setupTopFunctionsListeners() {
+                            const topFunctionsHeader = resultDiv.querySelector('.top-functions-header');
+                            if (topFunctionsHeader) {
+                                // Remove existing listeners by cloning
+                                const newHeader = topFunctionsHeader.cloneNode(true);
+                                topFunctionsHeader.parentNode.replaceChild(newHeader, topFunctionsHeader);
+                                
+                                newHeader.addEventListener('click', (e) => {
+                                    // Don't toggle if clicking the dropdown
+                                    if (e.target.classList.contains('top-functions-focus-select')) {
+                                        return;
+                                    }
+                                    const isCollapsed = newHeader.classList.contains('collapsed');
+                                    const table = resultDiv.querySelector('.top-functions-table');
+                                    if (isCollapsed) {
+                                        newHeader.classList.remove('collapsed');
+                                        table.classList.remove('collapsed');
+                                    } else {
+                                        newHeader.classList.add('collapsed');
+                                        table.classList.add('collapsed');
+                                    }
+                                });
+                            }
+                            
+                            const focusSelect = resultDiv.querySelector('#focusAttributeSelect');
+                            if (focusSelect) {
+                                focusSelect.addEventListener('change', (e) => {
+                                    selectedFocusAttribute = e.target.value;
+                                    updateTopFunctionsTable();
+                                });
+                            }
+                        }
                         
+                        function updateTopFunctionsTable() {
+                            const topFunctionsContainer = resultDiv.querySelector('.top-functions');
+                            if (topFunctionsContainer) {
+                                const wasCollapsed = resultDiv.querySelector('.top-functions-header').classList.contains('collapsed');
+                                topFunctionsContainer.outerHTML = renderTopFunctionsTable(currentCostMap, selectedFocusAttribute);
+                                
+                                const newHeader = resultDiv.querySelector('.top-functions-header');
+                                const newTable = resultDiv.querySelector('.top-functions-table');
+                                if (wasCollapsed && newHeader && newTable) {
+                                    newHeader.classList.add('collapsed');
+                                    newTable.classList.add('collapsed');
+                                }
+                                
+                                setupTopFunctionsListeners();
+                            }
+                        }
+                        
+                        setupTopFunctionsListeners();
+
                         // Add hover event listeners
                         const hoverables = resultDiv.querySelectorAll('.hoverable');
                         let currentTooltip = null;
-                        
+
                         hoverables.forEach(el => {
                             el.addEventListener('mouseenter', (e) => {
                                 if (currentTooltip) {
@@ -334,17 +591,17 @@
                                 const costJson = el.getAttribute('data-cost');
                                 currentTooltip = showTooltip(el, costJson, e);
                             });
-                            
+
                             el.addEventListener('mousemove', (e) => {
                                 if (currentTooltip) {
                                     // Update tooltip position as mouse moves, accounting for scroll
                                     const tooltipRect = currentTooltip.getBoundingClientRect();
                                     const mouseX = e.clientX + window.scrollX;
                                     const mouseY = e.clientY + window.scrollY;
-                                    
+
                                     let left = mouseX + 15;
                                     let top = mouseY - 10;
-                                    
+
                                     // Adjust if tooltip goes off screen horizontally (viewport-relative)
                                     const viewportRight = window.innerWidth + window.scrollX - 10;
                                     if (left + tooltipRect.width > viewportRight) {
@@ -354,7 +611,7 @@
                                     if (left < viewportLeft) {
                                         left = viewportLeft;
                                     }
-                                    
+
                                     // Adjust if tooltip goes off screen vertically (viewport-relative)
                                     const viewportBottom = window.innerHeight + window.scrollY - 10;
                                     if (top + tooltipRect.height > viewportBottom) {
@@ -364,12 +621,12 @@
                                     if (top < viewportTop) {
                                         top = viewportTop;
                                     }
-                                    
+
                                     currentTooltip.style.left = left + 'px';
                                     currentTooltip.style.top = top + 'px';
                                 }
                             });
-                            
+
                             el.addEventListener('mouseleave', () => {
                                 if (currentTooltip) {
                                     currentTooltip.remove();

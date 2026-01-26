@@ -22,3 +22,5 @@ npm-debug.log*
 *.profraw
 components/clarinet-files/clarinet-manifest.schema.json
 result
+*.db
+thicket_cache.db
