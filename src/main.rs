@@ -39,7 +39,24 @@ async fn main() {
     let cache = Arc::new(cache::Cache::new().expect("Failed to initialize cache"));
     println!("Cache initialized");
 
-    let app = Router::new()
+    let app = create_app(cache);
+
+    // Support PORT environment variable (Railway provides this)
+    let port = std::env::var("PORT")
+        .unwrap_or_else(|_| "3000".to_string())
+        .parse::<u16>()
+        .expect("PORT must be a valid number");
+    
+    let addr = format!("0.0.0.0:{}", port);
+    let listener = tokio::net::TcpListener::bind(&addr)
+        .await
+        .unwrap();
+    println!("Server running on http://{}", addr);
+    axum::serve(listener, app).await.unwrap();
+}
+
+fn create_app(cache: Arc<cache::Cache>) -> Router {
+    Router::new()
         .route("/contract", post(handle_contract))
         .route("/contract-source", post(handle_contract_source))
         .route("/recent-urls", get(handle_recent_urls))
@@ -50,13 +67,7 @@ async fn main() {
             ServiceBuilder::new()
                 .layer(axum::middleware::from_fn(add_cors_headers))
         )
-        .with_state(cache);
-
-    let listener = tokio::net::TcpListener::bind("0.0.0.0:3000")
-        .await
-        .unwrap();
-    println!("Server running on http://localhost:3000");
-    axum::serve(listener, app).await.unwrap();
+        .with_state(cache)
 }
 
 async fn add_cors_headers(

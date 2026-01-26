@@ -8,7 +8,11 @@ pub struct Cache {
 
 impl Cache {
     pub fn new() -> SqlResult<Self> {
-        let conn = Connection::open("thicket_cache.db")?;
+        Self::with_path("thicket_cache.db")
+    }
+
+    pub fn with_path(path: &str) -> SqlResult<Self> {
+        let conn = Connection::open(path)?;
         let cache = Cache {
             conn: Mutex::new(conn),
         };

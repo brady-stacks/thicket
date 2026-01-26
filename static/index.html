@@ -376,7 +376,7 @@
     <div class="container">
         <h1>Thicket</h1>
         <h3>Clarity Static Cost Analysis</h3>
-        <p id="inputDescription" style="color: #93a1a1;">Paste a contract URL analyze the static cost</p>
+        <p id="inputDescription" style="color: #93a1a1;">Paste a contract URL to analyze the static cost</p>
         <div class="input-container">
             <select id="inputTypeSelect">
                 <option value="url">URL</option>
@@ -440,14 +440,14 @@
                 if (!response.ok) return;
                 const data = await response.json();
                 const urls = data.urls || [];
-                
+
                 if (urls.length === 0) {
                     recentSearchesDropdown.innerHTML = '<div class="recent-search-item" style="cursor: default; color: #586e75;">No recent URLs</div>';
                     showRecentSearches();
                     return;
                 }
 
-                recentSearchesDropdown.innerHTML = urls.map(url => 
+                recentSearchesDropdown.innerHTML = urls.map(url =>
                     `<div class="recent-search-item" data-url="${escapeHtml(url)}">
                         <div class="recent-search-item-url">${escapeHtml(url)}</div>
                     </div>`
@@ -478,14 +478,14 @@
                 if (!response.ok) return;
                 const data = await response.json();
                 const sources = data.sources || [];
-                
+
                 if (sources.length === 0) {
                     recentSearchesDropdown.innerHTML = '<div class="recent-search-item" style="cursor: default; color: #586e75;">No recent sources</div>';
                     showRecentSearches();
                     return;
                 }
 
-                recentSearchesDropdown.innerHTML = sources.map(source => 
+                recentSearchesDropdown.innerHTML = sources.map(source =>
                     `<div class="recent-search-item" data-key="${escapeHtml(source.key)}">
                         <div class="recent-search-item-source">${escapeHtml(source.preview)}</div>
                     </div>`
