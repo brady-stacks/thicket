@@ -130,64 +130,17 @@
             display: none;
         }
         .content-wrapper {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
+            display: flex;
+            flex-direction: column;
             gap: 20px;
             margin-top: 20px;
         }
-        .content-wrapper.cost-map-hidden {
-            grid-template-columns: 1fr;
-        }
-        @media (max-width: 1200px) {
-            .content-wrapper {
-                grid-template-columns: 1fr;
-            }
-        }
-        .source-section, .cost-section {
+        .source-section {
             background: #002b36; /* Solarized base03 */
             border-radius: 4px;
             padding: 15px;
             border: 1px solid #586e75; /* Solarized base01 */
-        }
-        .cost-section {
             position: relative;
-        }
-        .cost-section.hidden {
-            display: none;
-        }
-        .content-wrapper {
-            position: relative;
-        }
-        .cost-map-toggle {
-            position: absolute;
-            top: 15px;
-            right: -30px;
-            width: 30px;
-            height: 30px;
-            background: #073642; /* Solarized base02 */
-            border: 1px solid #586e75; /* Solarized base01 */
-            border-left: none;
-            border-radius: 0 4px 4px 0;
-            cursor: pointer;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            color: #859900; /* Solarized green */
-            font-size: 14px;
-            user-select: none;
-            z-index: 10;
-        }
-        .content-wrapper.cost-map-hidden .cost-map-toggle {
-            right: -30px;
-        }
-        .cost-map-toggle:hover {
-            background: #002b36; /* Solarized base03 */
-        }
-        .cost-map-toggle::before {
-            content: '◀';
-        }
-        .content-wrapper.cost-map-hidden .cost-map-toggle::before {
-            content: '▶';
         }
         .section-title {
             color: #859900; /* Solarized green */
@@ -243,14 +196,6 @@
         }
         .tooltip .cost-value {
             color: #268bd2; /* Solarized blue */
-        }
-        #costTree {
-            padding: 15px;
-            background: #002b36; /* Solarized base03 */
-            border-radius: 4px;
-            font-size: 12px;
-            white-space: pre-wrap;
-            font-family: inherit;
         }
         .loading {
             color: #586e75; /* Solarized base01 */
@@ -371,6 +316,24 @@
             color: #859900; /* Solarized green */
             font-size: 0.9em;
             margin-left: 4px;
+        }
+        .download-json-link {
+            display: inline-block;
+            margin-top: 15px;
+            padding: 8px 15px;
+            background: #073642; /* Solarized base02 */
+            border: 1px solid #586e75; /* Solarized base01 */
+            border-radius: 4px;
+            color: #268bd2; /* Solarized blue */
+            text-decoration: none;
+            font-size: 14px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .download-json-link:hover {
+            background: #002b36; /* Solarized base03 */
+            border-color: #268bd2; /* Solarized blue */
+            color: #2aa198; /* Solarized cyan */
         }
         #sourceCode .function-anchor {
             scroll-margin-top: 20px;
@@ -810,9 +773,24 @@
                 </tr>`;
             });
 
-            tableHtml += '</tbody></table></div></div>';
+            tableHtml += '</tbody></table></div>';
+            tableHtml += '<a href="#" class="download-json-link" onclick="downloadCostMapJson(); return false;">Download full JSON</a>';
+            tableHtml += '</div>';
 
             return tableHtml;
+        }
+
+        function downloadCostMapJson() {
+            const jsonString = JSON.stringify(currentCostMap, null, 2);
+            const blob = new Blob([jsonString], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'cost-map.json';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
         }
 
         function formatPercentage(value, limit) {
@@ -992,16 +970,11 @@
 
             resultDiv.innerHTML = `
                 ${renderTopFunctionsTable(costMap, selectedFocusAttribute)}
-                <div class="content-wrapper cost-map-hidden">
+                <div class="content-wrapper">
                     <div class="source-section">
                         <h2 class="section-title">Source Code</h2>
                         <div id="sourceCode">${renderSourceCode(sourceCode, costMap)}</div>
                     </div>
-                    <div class="cost-section hidden">
-                        <h2 class="section-title">Cost Map</h2>
-                        <div id="costTree">${JSON.stringify(costMap, null, 2)}</div>
-                    </div>
-                    <div class="cost-map-toggle"></div>
                 </div>
             `;
 
@@ -1057,23 +1030,6 @@
             }
 
             setupTopFunctionsListeners();
-
-            // Add cost map toggle handler
-            const costMapToggle = resultDiv.querySelector('.cost-map-toggle');
-            const costSection = resultDiv.querySelector('.cost-section');
-            const contentWrapper = resultDiv.querySelector('.content-wrapper');
-            if (costMapToggle && costSection && contentWrapper) {
-                costMapToggle.addEventListener('click', () => {
-                    const isHidden = costSection.classList.contains('hidden');
-                    if (isHidden) {
-                        costSection.classList.remove('hidden');
-                        contentWrapper.classList.remove('cost-map-hidden');
-                    } else {
-                        costSection.classList.add('hidden');
-                        contentWrapper.classList.add('cost-map-hidden');
-                    }
-                });
-            }
 
             // Add hover event listeners
             const hoverables = resultDiv.querySelectorAll('.hoverable');
