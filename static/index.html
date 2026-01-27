@@ -549,7 +549,9 @@
             let html = escapeHtml(sourceCode);
 
             // Create hoverable spans for function names
-            const functionNames = Object.keys(costMap);
+            // Sort by length (longest first) to match longer names before shorter ones
+            // This prevents "zest-close" from matching inside "zest-close-remove-redeem"
+            const functionNames = Object.keys(costMap).sort((a, b) => b.length - a.length);
             const escapedFuncNames = functionNames.map(name => name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
 
             functionNames.forEach((funcName, funcIdx) => {
@@ -558,7 +560,10 @@
                 let anchorAdded = false;
 
                 // Find all function name occurrences - only match when preceded by opening parenthesis
-                const funcRegex = new RegExp(`\\(${escapedName}\\b`, 'g');
+                // Use a negative lookahead to ensure the function name is not followed by a hyphen
+                // This prevents matching "zest-close" inside "zest-close-remove-redeem"
+                // Match: (func-name followed by ) or whitespace, but NOT by - or other word chars
+                const funcRegex = new RegExp(`\\(${escapedName}(?![-a-zA-Z0-9_])`, 'g');
                 const allMatches = [];
 
                 // Collect all matches
