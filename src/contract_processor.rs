@@ -1,6 +1,7 @@
 use crate::cache::Cache;
 use clarity::vm::contexts::OwnedEnvironment;
 use clarity::vm::costs::analysis::static_cost_from_ast_with_source;
+use clarity::vm::costs::ExecutionCost;
 use clarity::vm::database::MemoryBackingStore;
 use clarity::vm::types::QualifiedContractIdentifier;
 use clarity::vm::{ClarityVersion, ast};
@@ -30,9 +31,12 @@ pub async fn process_contract_source(
 
     if let Ok(Some((cached_source_code, cached_cost_map))) = cache_result {
         println!("Cache hit for source code");
+        // Ensure block_limits are always present, even in cached responses
+        let mut cost_map_with_limits = cached_cost_map.clone();
+        ensure_block_limits(&mut cost_map_with_limits);
         return Ok(json!({
             "source_code": cached_source_code,
-            "cost_map": cached_cost_map
+            "cost_map": cost_map_with_limits
         }));
     }
 
@@ -80,9 +84,12 @@ pub async fn process_contract_url(
 
     if let Ok(Some((cached_source_code, cached_cost_map))) = cache_result {
         println!("Cache hit for URL: {}", url);
+        // Ensure block_limits are always present, even in cached responses
+        let mut cost_map_with_limits = cached_cost_map.clone();
+        ensure_block_limits(&mut cost_map_with_limits);
         return Ok(json!({
             "source_code": cached_source_code,
-            "cost_map": cached_cost_map
+            "cost_map": cost_map_with_limits
         }));
     }
 
@@ -405,6 +412,30 @@ fn clean_source_code(source: &str) -> String {
     cleaned
 }
 
+fn get_block_limits() -> ExecutionCost {
+    // Block limits for mainnet Epoch33
+    ExecutionCost {
+        runtime: 5_000_000_000,      // 5 billion
+        read_count: 7_300,            // 7,300
+        read_length: 100_000_000,     // 100 million
+        write_count: 7_300,           // 7,300
+        write_length: 15_000_000,     // 15 million
+    }
+}
+
+fn ensure_block_limits(cost_map: &mut serde_json::Value) {
+    if !cost_map.get("block_limits").is_some() {
+        let block_limit = get_block_limits();
+        cost_map["block_limits"] = json!({
+            "runtime": block_limit.runtime,
+            "read_count": block_limit.read_count,
+            "read_length": block_limit.read_length,
+            "write_count": block_limit.write_count,
+            "write_length": block_limit.write_length,
+        });
+    }
+}
+
 fn analyze_contract_source(source: &str) -> Result<serde_json::Value, Box<dyn std::error::Error>> {
     let contract_id = QualifiedContractIdentifier::transient();
     let epoch = StacksEpochId::Epoch33; // Using latest epoch
@@ -427,6 +458,9 @@ fn analyze_contract_source(source: &str) -> Result<serde_json::Value, Box<dyn st
             static_cost_from_ast_with_source(&ast, &clarity_version, epoch, Some(source), env)
         })
         .map_err(|e| format!("Failed to get static cost map: {}", e))?;
+
+    // Get block limit for mainnet
+    let block_limit = get_block_limits();
 
     // Convert cost map to JSON-serializable format
     let mut result = json!({});
@@ -452,6 +486,15 @@ fn analyze_contract_source(source: &str) -> Result<serde_json::Value, Box<dyn st
             "trait_count": trait_count,
         });
     }
+
+    // Add block limits to the result
+    result["block_limits"] = json!({
+        "runtime": block_limit.runtime,
+        "read_count": block_limit.read_count,
+        "read_length": block_limit.read_length,
+        "write_count": block_limit.write_count,
+        "write_length": block_limit.write_length,
+    });
 
     Ok(result)
 }

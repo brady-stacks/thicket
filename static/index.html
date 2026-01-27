@@ -367,8 +367,45 @@
             color: #268bd2; /* Solarized blue */
             text-align: right;
         }
+        .cost-percentage {
+            color: #859900; /* Solarized green */
+            font-size: 0.9em;
+            margin-left: 4px;
+        }
         #sourceCode .function-anchor {
             scroll-margin-top: 20px;
+        }
+        .scroll-to-top {
+            position: fixed;
+            bottom: 30px;
+            right: 30px;
+            width: 50px;
+            height: 50px;
+            background: #073642; /* Solarized base02 */
+            border: 2px solid #586e75; /* Solarized base01 */
+            border-radius: 50%;
+            cursor: pointer;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            color: #859900; /* Solarized green */
+            font-size: 24px;
+            z-index: 1000;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+        }
+        .scroll-to-top.show {
+            display: flex;
+        }
+        .scroll-to-top:hover {
+            background: #002b36; /* Solarized base03 */
+            border-color: #268bd2; /* Solarized blue */
+            color: #268bd2; /* Solarized blue */
+            transform: translateY(-3px);
+            box-shadow: 0 6px 8px rgba(0,0,0,0.4);
+        }
+        .scroll-to-top::before {
+            content: '▲';
         }
     </style>
 </head>
@@ -396,17 +433,62 @@
         <div id="result"></div>
     </div>
 
+    <button id="scrollToTop" class="scroll-to-top" aria-label="Scroll to top"></button>
+
     <script>
         const urlInput = document.getElementById('urlInput');
         const sourceInput = document.getElementById('sourceInput');
         const inputTypeSelect = document.getElementById('inputTypeSelect');
         const resultDiv = document.getElementById('result');
         const recentSearchesDropdown = document.getElementById('recentSearchesDropdown');
+        const scrollToTopButton = document.getElementById('scrollToTop');
         let lastPostedUrl = '';
         let lastPostedSource = '';
         let costTreeData = {};
         let currentCostMap = {};
         let selectedFocusAttribute = 'runtime';
+
+        // Show/hide scroll to top button based on scroll position
+        function handleScroll() {
+            if (window.scrollY > 100) {
+                scrollToTopButton.classList.add('show');
+            } else {
+                scrollToTopButton.classList.remove('show');
+            }
+        }
+
+        // Fast smooth scroll function (reusable)
+        function smoothScrollTo(targetY, duration = 250) {
+            const startPosition = window.scrollY;
+            const distance = targetY - startPosition;
+            const startTime = performance.now();
+
+            function scrollStep(currentTime) {
+                const elapsed = currentTime - startTime;
+                const progress = Math.min(elapsed / duration, 1);
+                
+                // Easing function for smooth deceleration
+                const easeOutCubic = 1 - Math.pow(1 - progress, 3);
+                
+                window.scrollTo(0, startPosition + distance * easeOutCubic);
+                
+                if (progress < 1) {
+                    requestAnimationFrame(scrollStep);
+                }
+            }
+            
+            requestAnimationFrame(scrollStep);
+        }
+
+        // Scroll to top when button is clicked (faster smooth scroll)
+        scrollToTopButton.addEventListener('click', () => {
+            smoothScrollTo(0);
+        });
+
+        // Listen for scroll events
+        window.addEventListener('scroll', handleScroll);
+        // Check initial scroll position
+        handleScroll();
 
         // Handle input type change
         const inputDescription = document.getElementById('inputDescription');
@@ -551,7 +633,10 @@
             // Create hoverable spans for function names
             // Sort by length (longest first) to match longer names before shorter ones
             // This prevents "zest-close" from matching inside "zest-close-remove-redeem"
-            const functionNames = Object.keys(costMap).sort((a, b) => b.length - a.length);
+            // Filter out 'block_limits' which is metadata, not a function name
+            const functionNames = Object.keys(costMap)
+                .filter(name => name !== 'block_limits')
+                .sort((a, b) => b.length - a.length);
             const escapedFuncNames = functionNames.map(name => name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
 
             functionNames.forEach((funcName, funcIdx) => {
@@ -644,6 +729,7 @@
 
         function getTop5FunctionsByAttribute(costMap, attribute = 'runtime') {
             const functions = Object.keys(costMap)
+                .filter(funcName => funcName !== 'block_limits') // Filter out metadata
                 .map(funcName => {
                     const cost = costMap[funcName];
                     if (cost && cost.cost && cost.cost.max && cost.cost.max[attribute] !== undefined) {
@@ -672,6 +758,23 @@
             const attributeLabel = getAttributeLabel(selectedAttribute);
             const attributes = ['runtime', 'read_count', 'read_length', 'write_count', 'write_length'];
 
+            // Get block limits from costMap
+            const blockLimits = costMap.block_limits || {};
+            const blockLimit = blockLimits[selectedAttribute];
+            
+            // Debug: Log what we're looking for
+            console.log('Looking for block limit:', {
+                selectedAttribute,
+                blockLimits,
+                blockLimit,
+                costMapKeys: Object.keys(costMap).slice(0, 10) // First 10 keys
+            });
+            
+            // If block limit is not available, don't show percentage
+            if (!blockLimit || blockLimit === 0) {
+                console.warn(`Block limit not found for attribute: ${selectedAttribute}`, blockLimits);
+            }
+
             let tableHtml = '<div class="top-functions">';
             tableHtml += '<div class="top-functions-header">';
             tableHtml += '<div class="top-functions-header-content">';
@@ -686,14 +789,24 @@
             tableHtml += '</div>';
             tableHtml += '<div class="top-functions-table">';
             tableHtml += '<table>';
-            tableHtml += `<thead><tr><th>Function</th><th style="text-align: right;">Max ${attributeLabel}</th></tr></thead>`;
+            tableHtml += `<thead><tr><th>Function</th><th style="text-align: right;">Max ${attributeLabel}</th><th style="text-align: right;">${attributeLabel} %</th></tr></thead>`;
             tableHtml += '<tbody>';
 
             topFunctions.forEach(func => {
                 const anchorId = `func-${func.name.replace(/[^a-zA-Z0-9]/g, '-')}`;
+                let percentageCell = 'N/A';
+                if (blockLimit && blockLimit > 0 && typeof blockLimit === 'number') {
+                    const value = Number(func.value);
+                    const limit = Number(blockLimit);
+                    if (!isNaN(value) && !isNaN(limit) && limit > 0) {
+                        const percentage = ((value / limit) * 100).toFixed(2);
+                        percentageCell = `${percentage}%`;
+                    }
+                }
                 tableHtml += `<tr>
-                    <td class="function-name"><a href="#${anchorId}" onclick="document.getElementById('${anchorId}').scrollIntoView({ behavior: 'smooth', block: 'center' }); return false;">${escapeHtml(func.name)}</a></td>
+                    <td class="function-name"><a href="#${anchorId}" onclick="const el = document.getElementById('${anchorId}'); if (el) { const rect = el.getBoundingClientRect(); const targetY = window.scrollY + rect.top - (window.innerHeight / 2) + (rect.height / 2); smoothScrollTo(targetY); } return false;">${escapeHtml(func.name)}</a></td>
                     <td class="runtime-value">${formatNumber(func.value)}</td>
+                    <td class="runtime-value">${percentageCell}</td>
                 </tr>`;
             });
 
@@ -702,20 +815,37 @@
             return tableHtml;
         }
 
+        function formatPercentage(value, limit) {
+            if (!limit || limit === 0) return 'N/A';
+            const numValue = Number(value);
+            const numLimit = Number(limit);
+            if (isNaN(numValue) || isNaN(numLimit) || numLimit === 0) return 'N/A';
+            return ((numValue / numLimit) * 100).toFixed(2) + '%';
+        }
+
         function showTooltip(element, costJson, event) {
             const tooltip = document.createElement('div');
             tooltip.className = 'tooltip';
 
             try {
                 const cost = JSON.parse(costJson);
+                // Get block limits from costTreeData (the full cost map)
+                const blockLimits = costTreeData?.block_limits || {};
+                
                 let html = '<div class="tooltip-title">Cost Information</div>';
 
                 if (cost.cost) {
-                    html += `<div class="cost-item"><span class="cost-label">Runtime:</span> <span class="cost-value">${formatRange(cost.cost.min.runtime, cost.cost.max.runtime)}</span></div>`;
-                    html += `<div class="cost-item"><span class="cost-label">Read Count:</span> <span class="cost-value">${formatRange(cost.cost.min.read_count, cost.cost.max.read_count)}</span></div>`;
-                    html += `<div class="cost-item"><span class="cost-label">Read Length:</span> <span class="cost-value">${formatRange(cost.cost.min.read_length, cost.cost.max.read_length)}</span></div>`;
-                    html += `<div class="cost-item"><span class="cost-label">Write Count:</span> <span class="cost-value">${formatRange(cost.cost.min.write_count, cost.cost.max.write_count)}</span></div>`;
-                    html += `<div class="cost-item"><span class="cost-label">Write Length:</span> <span class="cost-value">${formatRange(cost.cost.min.write_length, cost.cost.max.write_length)}</span></div>`;
+                    const runtimeLimit = blockLimits.runtime;
+                    const readCountLimit = blockLimits.read_count;
+                    const readLengthLimit = blockLimits.read_length;
+                    const writeCountLimit = blockLimits.write_count;
+                    const writeLengthLimit = blockLimits.write_length;
+
+                    html += `<div class="cost-item"><span class="cost-label">Runtime:</span> <span class="cost-value">${formatRange(cost.cost.min.runtime, cost.cost.max.runtime)}</span> <span class="cost-percentage">(${formatPercentage(cost.cost.max.runtime, runtimeLimit)})</span></div>`;
+                    html += `<div class="cost-item"><span class="cost-label">Read Count:</span> <span class="cost-value">${formatRange(cost.cost.min.read_count, cost.cost.max.read_count)}</span> <span class="cost-percentage">(${formatPercentage(cost.cost.max.read_count, readCountLimit)})</span></div>`;
+                    html += `<div class="cost-item"><span class="cost-label">Read Length:</span> <span class="cost-value">${formatRange(cost.cost.min.read_length, cost.cost.max.read_length)}</span> <span class="cost-percentage">(${formatPercentage(cost.cost.max.read_length, readLengthLimit)})</span></div>`;
+                    html += `<div class="cost-item"><span class="cost-label">Write Count:</span> <span class="cost-value">${formatRange(cost.cost.min.write_count, cost.cost.max.write_count)}</span> <span class="cost-percentage">(${formatPercentage(cost.cost.max.write_count, writeCountLimit)})</span></div>`;
+                    html += `<div class="cost-item"><span class="cost-label">Write Length:</span> <span class="cost-value">${formatRange(cost.cost.min.write_length, cost.cost.max.write_length)}</span> <span class="cost-percentage">(${formatPercentage(cost.cost.max.write_length, writeLengthLimit)})</span></div>`;
                 }
 
                 if (cost.trait_count) {
@@ -852,6 +982,13 @@
             const sourceCode = data.source_code || '';
             const costMap = data.cost_map || {};
             currentCostMap = costMap; // Store for dropdown updates
+
+            // Debug: Log block limits to verify they're present
+            if (costMap.block_limits) {
+                console.log('Block limits found:', costMap.block_limits);
+            } else {
+                console.warn('Block limits not found in costMap:', Object.keys(costMap));
+            }
 
             resultDiv.innerHTML = `
                 ${renderTopFunctionsTable(costMap, selectedFocusAttribute)}
