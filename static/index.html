@@ -317,6 +317,10 @@
             font-size: 0.9em;
             margin-left: 4px;
         }
+        .trait-count-highlight {
+            color: #cb4b16; /* Solarized orange - for high trait counts */
+            font-weight: bold;
+        }
         .download-json-link {
             display: inline-block;
             margin-top: 15px;
@@ -685,7 +689,8 @@
                 'read_count': 'Read Count',
                 'read_length': 'Read Length',
                 'write_count': 'Write Count',
-                'write_length': 'Write Length'
+                'write_length': 'Write Length',
+                'trait_count': 'Trait Count'
             };
             return labels[attribute] || attribute;
         }
@@ -695,12 +700,24 @@
                 .filter(funcName => funcName !== 'block_limits') // Filter out metadata
                 .map(funcName => {
                     const cost = costMap[funcName];
-                    if (cost && cost.cost && cost.cost.max && cost.cost.max[attribute] !== undefined) {
-                        return {
-                            name: funcName,
-                            value: cost.cost.max[attribute],
-                            attribute: attribute
-                        };
+                    if (attribute === 'trait_count') {
+                        // For trait count sorting
+                        if (cost && cost.trait_count !== undefined) {
+                            return {
+                                name: funcName,
+                                value: cost.trait_count,
+                                attribute: attribute
+                            };
+                        }
+                    } else {
+                        // For regular cost attributes
+                        if (cost && cost.cost && cost.cost.max && cost.cost.max[attribute] !== undefined) {
+                            return {
+                                name: funcName,
+                                value: cost.cost.max[attribute],
+                                attribute: attribute
+                            };
+                        }
                     }
                     return null;
                 })
@@ -719,7 +736,7 @@
             }
 
             const attributeLabel = getAttributeLabel(selectedAttribute);
-            const attributes = ['runtime', 'read_count', 'read_length', 'write_count', 'write_length'];
+            const attributes = ['runtime', 'read_count', 'read_length', 'write_count', 'write_length', 'trait_count'];
 
             // Get block limits from costMap
             const blockLimits = costMap.block_limits || {};
@@ -752,12 +769,14 @@
             tableHtml += '</div>';
             tableHtml += '<div class="top-functions-table">';
             tableHtml += '<table>';
-            tableHtml += `<thead><tr><th>Function</th><th style="text-align: right;">Max ${attributeLabel}</th><th style="text-align: right;">${attributeLabel} %</th></tr></thead>`;
+            tableHtml += `<thead><tr><th>Function</th><th style="text-align: right;">Max ${attributeLabel}</th><th style="text-align: right;">${attributeLabel} %</th><th style="text-align: right;">Trait Count</th></tr></thead>`;
             tableHtml += '<tbody>';
 
             topFunctions.forEach(func => {
                 const anchorId = `func-${func.name.replace(/[^a-zA-Z0-9]/g, '-')}`;
                 let percentageCell = 'N/A';
+                let traitCountCell = 'N/A';
+                
                 if (blockLimit && blockLimit > 0 && typeof blockLimit === 'number') {
                     const value = Number(func.value);
                     const limit = Number(blockLimit);
@@ -766,10 +785,18 @@
                         percentageCell = `${percentage}%`;
                     }
                 }
+                
+                // Get trait count for this function
+                const funcData = costMap[func.name];
+                if (funcData && funcData.trait_count) {
+                    traitCountCell = funcData.trait_count;
+                }
+
                 tableHtml += `<tr>
                     <td class="function-name"><a href="#${anchorId}" onclick="const el = document.getElementById('${anchorId}'); if (el) { const rect = el.getBoundingClientRect(); const targetY = window.scrollY + rect.top - (window.innerHeight / 2) + (rect.height / 2); smoothScrollTo(targetY); } return false;">${escapeHtml(func.name)}</a></td>
                     <td class="runtime-value">${formatNumber(func.value)}</td>
                     <td class="runtime-value">${percentageCell}</td>
+                    <td class="runtime-value">${traitCountCell}</td>
                 </tr>`;
             });
 
@@ -826,8 +853,9 @@
                     html += `<div class="cost-item"><span class="cost-label">Write Length:</span> <span class="cost-value">${formatRange(cost.cost.min.write_length, cost.cost.max.write_length)}</span> <span class="cost-percentage">(${formatPercentage(cost.cost.max.write_length, writeLengthLimit)})</span></div>`;
                 }
 
-                if (cost.trait_count) {
-                    html += `<div class="cost-item" style="margin-top: 8px;"><span class="cost-label">Trait Count:</span> <span class="cost-value">${JSON.stringify(cost.trait_count)}</span></div>`;
+                if (cost.trait_count !== undefined) {
+                    const traitCountClass = cost.trait_count > 0 ? 'trait-count-highlight' : '';
+                    html += `<div class="cost-item" style="margin-top: 8px;"><span class="cost-label">Trait Count:</span> <span class="cost-value ${traitCountClass}">${JSON.stringify(cost.trait_count)}</span></div>`;
                 }
 
                 tooltip.innerHTML = html;
