@@ -1,7 +1,7 @@
 use crate::cache::Cache;
 use clarity::vm::contexts::OwnedEnvironment;
-use clarity::vm::costs::analysis::static_cost_from_ast_with_source;
 use clarity::vm::costs::ExecutionCost;
+use clarity::vm::costs::analysis::static_cost_from_ast_with_source;
 use clarity::vm::database::MemoryBackingStore;
 use clarity::vm::types::QualifiedContractIdentifier;
 use clarity::vm::{ClarityVersion, ast};
@@ -30,14 +30,26 @@ pub async fn process_contract_source(
     .map_err(|e| format!("Cache lookup error: {}", e))?;
 
     if let Ok(Some((cached_source_code, cached_cost_map))) = cache_result {
-        println!("Cache hit for source code");
-        // Ensure block_limits are always present, even in cached responses
-        let mut cost_map_with_limits = cached_cost_map.clone();
-        ensure_block_limits(&mut cost_map_with_limits);
-        return Ok(json!({
-            "source_code": cached_source_code,
-            "cost_map": cost_map_with_limits
-        }));
+        // Check if trait_count exists in cached data - if not, treat as cache miss
+        let has_trait_count = cached_cost_map
+            .as_object()
+            .and_then(|m| m.iter().find(|(k, _)| *k != "block_limits"))
+            .and_then(|(_, v)| v.as_object())
+            .map(|func_obj| func_obj.contains_key("trait_count"))
+            .unwrap_or(false);
+
+        if !has_trait_count {
+            // Missing trait_count, treat as cache miss to re-analyze
+        } else {
+            println!("Cache hit for source code");
+            // Ensure block_limits are always present, even in cached responses
+            let mut cost_map_with_limits = cached_cost_map.clone();
+            ensure_block_limits(&mut cost_map_with_limits);
+            return Ok(json!({
+                "source_code": cached_source_code,
+                "cost_map": cost_map_with_limits
+            }));
+        }
     }
 
     println!("Cache miss for source code");
@@ -83,14 +95,26 @@ pub async fn process_contract_url(
     .map_err(|e| format!("Cache lookup error: {}", e))?;
 
     if let Ok(Some((cached_source_code, cached_cost_map))) = cache_result {
-        println!("Cache hit for URL: {}", url);
-        // Ensure block_limits are always present, even in cached responses
-        let mut cost_map_with_limits = cached_cost_map.clone();
-        ensure_block_limits(&mut cost_map_with_limits);
-        return Ok(json!({
-            "source_code": cached_source_code,
-            "cost_map": cost_map_with_limits
-        }));
+        // Check if trait_count exists in cached data - if not, treat as cache miss
+        let has_trait_count = cached_cost_map
+            .as_object()
+            .and_then(|m| m.iter().find(|(k, _)| *k != "block_limits"))
+            .and_then(|(_, v)| v.as_object())
+            .map(|func_obj| func_obj.contains_key("trait_count"))
+            .unwrap_or(false);
+
+        if !has_trait_count {
+            // Missing trait_count, treat as cache miss to re-analyze
+        } else {
+            println!("Cache hit for URL: {}", url);
+            // Ensure block_limits are always present, even in cached responses
+            let mut cost_map_with_limits = cached_cost_map.clone();
+            ensure_block_limits(&mut cost_map_with_limits);
+            return Ok(json!({
+                "source_code": cached_source_code,
+                "cost_map": cost_map_with_limits
+            }));
+        }
     }
 
     println!("Cache miss for URL: {}", url);
@@ -415,11 +439,11 @@ fn clean_source_code(source: &str) -> String {
 fn get_block_limits() -> ExecutionCost {
     // Block limits for mainnet Epoch33
     ExecutionCost {
-        runtime: 5_000_000_000,      // 5 billion
-        read_count: 7_300,            // 7,300
-        read_length: 100_000_000,     // 100 million
-        write_count: 7_300,           // 7,300
-        write_length: 15_000_000,     // 15 million
+        runtime: 5_000_000_000,   // 5 billion
+        read_count: 7_300,        // 7,300
+        read_length: 100_000_000, // 100 million
+        write_count: 7_300,       // 7,300
+        write_length: 15_000_000, // 15 million
     }
 }
 
