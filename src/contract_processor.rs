@@ -1,10 +1,10 @@
 use crate::cache::Cache;
-use clarity::vm::contexts::OwnedEnvironment;
+use clarity::vm::contexts::{ContractContext, OwnedEnvironment};
 use clarity::vm::costs::ExecutionCost;
-use clarity::vm::costs::analysis::static_cost_from_ast_with_source;
 use clarity::vm::database::MemoryBackingStore;
 use clarity::vm::types::QualifiedContractIdentifier;
 use clarity::vm::{ClarityVersion, ast};
+use clarity_static_cost::static_cost::static_cost_from_ast_with_source;
 use reqwest;
 use scraper::{Html, Selector};
 use serde_json::json;
@@ -469,19 +469,18 @@ fn analyze_contract_source(source: &str) -> Result<serde_json::Value, Box<dyn st
     let ast = ast::build_ast(&contract_id, source, &mut (), clarity_version, epoch)
         .map_err(|e| format!("Failed to build AST: {:?}", e))?;
 
-    // Set up environment similar to run_cost_analysis_test
+    // Set up environment for static cost analysis
     let mut memory_store = MemoryBackingStore::new();
     let db = memory_store.as_clarity_db();
-    // Use new_free for a free cost tracker (suitable for static analysis)
     let mut owned_env =
         OwnedEnvironment::new_free(false, stacks_common::consts::CHAIN_ID_TESTNET, db, epoch);
 
-    // Get static cost map (not tree)
-    let static_cost_map = owned_env
-        .with_cost_analysis_environment(&contract_id, clarity_version, |env| {
-            static_cost_from_ast_with_source(&ast, &clarity_version, epoch, Some(source), env)
-        })
-        .map_err(|e| format!("Failed to get static cost map: {}", e))?;
+    // Get static cost map using clarinet's clarity-static-cost
+    let contract_context = ContractContext::new(contract_id.clone(), clarity_version);
+    let mut env = owned_env.get_exec_environment(None, None, &contract_context);
+    let static_cost_map =
+        static_cost_from_ast_with_source(&ast, &clarity_version, epoch, Some(source), &mut env)
+            .map_err(|e| format!("Failed to get static cost map: {}", e))?;
 
     // Get block limit for mainnet
     let block_limit = get_block_limits();

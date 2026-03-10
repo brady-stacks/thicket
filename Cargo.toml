@@ -18,11 +18,11 @@ reqwest = { version = "0.11", features = ["json"] }
 scraper = "0.19"
 regex = "1"
 rusqlite = { version = "0.31", features = ["bundled"] }
-# Stacks-core dependencies from commit ac9083870cdb8f49e9e450e0dbe3b5ec706bc2f6
-clarity = { git = "https://github.com/brady-stacks/stacks-core", rev = "179cc48101a3bbbd115407f0459a8866a8f7394d", features = [
+# Stacks-core dependencies matching clarinet's revision
+clarity = { git = "https://github.com/stacks-network/stacks-core.git", rev = "41bd9d0a15a08d8ab2603edf11774b0d21a616ec", package = "clarity", default-features = false, features = [
     "developer-mode",
+    "rusqlite",
 ] }
-
-stacks_common = { package = "stacks-common", git = "https://github.com/brady-stacks/stacks-core", rev = "179cc48101a3bbbd115407f0459a8866a8f7394d", default-features = false }
-clarity_types = { package = "clarity-types", git = "https://github.com/brady-stacks/stacks-core", rev = "179cc48101a3bbbd115407f0459a8866a8f7394d", default-features = false }
-stackslib = { git = "https://github.com/brady-stacks/stacks-core", rev = "179cc48101a3bbbd115407f0459a8866a8f7394d" }
+stacks_common = { package = "stacks-common", git = "https://github.com/stacks-network/stacks-core.git", rev = "41bd9d0a15a08d8ab2603edf11774b0d21a616ec", default-features = false }
+# Clarinet clarity-static-cost
+clarity_static_cost = { package = "clarity-static-cost", git = "https://github.com/stx-labs/clarinet", rev = "59653687be1007ca10e079bb5485cec970a5dc59" }
