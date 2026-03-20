@@ -19,10 +19,10 @@ scraper = "0.19"
 regex = "1"
 rusqlite = { version = "0.31", features = ["bundled"] }
 # Stacks-core dependencies matching clarinet's revision
-clarity = { git = "https://github.com/stacks-network/stacks-core.git", rev = "41bd9d0a15a08d8ab2603edf11774b0d21a616ec", package = "clarity", default-features = false, features = [
+clarity = { git = "https://github.com/stacks-network/stacks-core.git", rev = "962e7ab9b3a473aaf5bd931ce28e415fd107d841", package = "clarity", default-features = false, features = [
     "developer-mode",
     "rusqlite",
 ] }
-stacks_common = { package = "stacks-common", git = "https://github.com/stacks-network/stacks-core.git", rev = "41bd9d0a15a08d8ab2603edf11774b0d21a616ec", default-features = false }
+stacks_common = { package = "stacks-common", git = "https://github.com/stacks-network/stacks-core.git", rev = "962e7ab9b3a473aaf5bd931ce28e415fd107d841", default-features = false }
 # Clarinet clarity-static-cost
-clarity_static_cost = { package = "clarity-static-cost", git = "https://github.com/stx-labs/clarinet", rev = "59653687be1007ca10e079bb5485cec970a5dc59" }
+clarity_static_cost = { package = "clarity-static-cost", git = "https://github.com/stx-labs/clarinet", rev = "9d194bba3b6d1040c95205b35183b407770d9019" }
