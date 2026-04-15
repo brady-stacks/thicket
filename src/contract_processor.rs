@@ -477,10 +477,16 @@ fn analyze_contract_source(source: &str) -> Result<serde_json::Value, Box<dyn st
 
     // Get static cost map using clarinet's clarity-static-cost
     let contract_context = ContractContext::new(contract_id.clone(), clarity_version);
-    let mut env = owned_env.get_exec_environment(None, None, &contract_context);
-    let static_cost_map =
-        static_cost_from_ast_with_source(&ast, &clarity_version, epoch, Some(source), &mut env)
-            .map_err(|e| format!("Failed to get static cost map: {}", e))?;
+    let (mut env, invoke_ctx) = owned_env.get_exec_environment(None, None, &contract_context);
+    let static_cost_map = static_cost_from_ast_with_source(
+        &ast,
+        &clarity_version,
+        epoch,
+        Some(source),
+        &mut env,
+        &invoke_ctx,
+    )
+    .map_err(|e| format!("Failed to get static cost map: {}", e))?;
 
     // Get block limit for mainnet
     let block_limit = get_block_limits();

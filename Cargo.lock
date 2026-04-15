@@ -242,7 +242,7 @@ dependencies = [
 [[package]]
 name = "clarity"
 version = "0.0.1"
-source = "git+https://github.com/stacks-network/stacks-core.git?rev=962e7ab9b3a473aaf5bd931ce28e415fd107d841#962e7ab9b3a473aaf5bd931ce28e415fd107d841"
+source = "git+https://github.com/stacks-network/stacks-core.git?rev=cecca4ac19cdc836c8f806dae0c63a90f0087fb9#cecca4ac19cdc836c8f806dae0c63a90f0087fb9"
 dependencies = [
  "clarity-types",
  "integer-sqrt",
@@ -259,8 +259,8 @@ dependencies = [
 
 [[package]]
 name = "clarity-static-cost"
-version = "3.15.0"
-source = "git+https://github.com/stx-labs/clarinet?rev=9d194bba3b6d1040c95205b35183b407770d9019#9d194bba3b6d1040c95205b35183b407770d9019"
+version = "3.16.0"
+source = "git+https://github.com/brady-stacks/clarinet?rev=f5e2186665ba221852ea7eff7740230509ae4f82#f5e2186665ba221852ea7eff7740230509ae4f82"
 dependencies = [
  "clarity",
  "clarity-types",
@@ -271,7 +271,7 @@ dependencies = [
 [[package]]
 name = "clarity-types"
 version = "0.0.1"
-source = "git+https://github.com/stacks-network/stacks-core.git?rev=962e7ab9b3a473aaf5bd931ce28e415fd107d841#962e7ab9b3a473aaf5bd931ce28e415fd107d841"
+source = "git+https://github.com/stacks-network/stacks-core.git?rev=cecca4ac19cdc836c8f806dae0c63a90f0087fb9#cecca4ac19cdc836c8f806dae0c63a90f0087fb9"
 dependencies = [
  "lazy_static",
  "regex",
@@ -2263,7 +2263,7 @@ dependencies = [
 [[package]]
 name = "stacks-common"
 version = "0.0.1"
-source = "git+https://github.com/stacks-network/stacks-core.git?rev=962e7ab9b3a473aaf5bd931ce28e415fd107d841#962e7ab9b3a473aaf5bd931ce28e415fd107d841"
+source = "git+https://github.com/stacks-network/stacks-core.git?rev=cecca4ac19cdc836c8f806dae0c63a90f0087fb9#cecca4ac19cdc836c8f806dae0c63a90f0087fb9"
 dependencies = [
  "chrono",
  "curve25519-dalek",
